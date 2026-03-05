@@ -1,8 +1,54 @@
 import { db } from "./db";
 import { knowledgeArticles, mediaAssets, adminSettings, widgetConfigs } from "@shared/schema";
-import { count } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
+
+async function ensureVideoAssets() {
+  const existingVideos = await db.select().from(mediaAssets).where(eq(mediaAssets.type, "video"));
+  if (existingVideos.length > 0) return;
+
+  console.log("Adding video media assets...");
+  const articles = await db.select().from(knowledgeArticles);
+  const printingArticle = articles.find(a => a.title.includes("Printing"));
+  const processArticle = articles.find(a => a.title.includes("Production Process"));
+  const poloArticle = articles.find(a => a.title.includes("Polo"));
+  const companyArticle = articles.find(a => a.title.includes("About Falcon"));
+
+  const videos = [
+    { title: "Screen Printing T-Shirt Tutorial", type: "video", url: "https://www.youtube.com/watch?v=MXNJpZTyLrI", description: "Step by step screen printing process on T-shirts", category: "printing", knowledgeArticleId: printingArticle?.id || null },
+    { title: "Textile Manufacturing in Tiruppur", type: "video", url: "https://www.youtube.com/watch?v=n9CS_w_qR-Y", description: "One of the biggest textile manufacturers in Tiruppur", category: "process", knowledgeArticleId: processArticle?.id || null },
+    { title: "T-Shirt Manufacturer in Tiruppur", type: "video", url: "https://www.youtube.com/watch?v=1HMnYzDqtxI", description: "T-shirt manufacturing and wholesale in Tiruppur", category: "products", knowledgeArticleId: poloArticle?.id || null },
+    { title: "Corporate T-Shirt Embroidery", type: "video", url: "https://www.youtube.com/watch?v=PNsPxyW4zNM", description: "Corporate T-shirt manufacturing with embroidery in Tiruppur", category: "products", knowledgeArticleId: poloArticle?.id || null },
+    { title: "Falcon Head Gear - Product Showcase", type: "video", url: "https://www.instagram.com/reel/C-AeTg2vYWU/", description: "Product showcase reel from Instagram", category: "products", knowledgeArticleId: poloArticle?.id || null },
+    { title: "Falcon Head Gear - Instagram Reel", type: "video", url: "https://www.instagram.com/reel/DTU9qupEQC7/", description: "Falcon Head Gear product reel from Instagram", category: "company", knowledgeArticleId: companyArticle?.id || null },
+  ];
+
+  for (const v of videos) {
+    await db.insert(mediaAssets).values(v);
+  }
+  console.log(`Added ${videos.length} video assets`);
+}
+
+async function ensureSuggestedQuestions() {
+  const existing = await db.select().from(adminSettings).where(eq(adminSettings.key, "suggested_questions"));
+  if (existing.length > 0) return;
+
+  console.log("Adding suggested_questions setting...");
+  await db.insert(adminSettings).values({
+    key: "suggested_questions",
+    value: JSON.stringify([
+      "What types of T-shirts do you manufacture?",
+      "What are the available GSM options for polo T-shirts?",
+      "How do I place a bulk order for caps?",
+      "What printing methods do you offer?",
+      "What is the minimum order quantity?",
+    ]),
+  });
+}
 
 export async function seedDatabase() {
+  await ensureVideoAssets();
+  await ensureSuggestedQuestions();
+
   const [existing] = await db.select({ count: count() }).from(knowledgeArticles);
   if (existing.count > 0) {
     console.log("Database already seeded, skipping...");
