@@ -130,12 +130,29 @@ async function getMediaForArticles(articles: KnowledgeArticle[]): Promise<Map<nu
   return mediaMap;
 }
 
-export function getSuggestedQuestions(): string[] {
-  return [
-    "What types of T-shirts do you manufacture?",
-    "What are the available GSM options for polo T-shirts?",
-    "How do I place a bulk order for caps?",
-    "What printing methods do you offer?",
-    "What is the minimum order quantity?",
-  ];
+const DEFAULT_SUGGESTED_QUESTIONS = [
+  "What types of T-shirts do you manufacture?",
+  "What are the available GSM options for polo T-shirts?",
+  "How do I place a bulk order for caps?",
+  "What printing methods do you offer?",
+  "What is the minimum order quantity?",
+];
+
+export async function getSuggestedQuestions(): Promise<string[]> {
+  const cacheKey = "suggested_questions";
+  const cached = cache.get<string[]>(cacheKey);
+  if (cached) return cached;
+
+  const settingValue = await storage.getSetting("suggested_questions");
+  if (settingValue) {
+    try {
+      const questions = JSON.parse(settingValue);
+      if (Array.isArray(questions) && questions.length > 0) {
+        cache.set(cacheKey, questions, 60000);
+        return questions;
+      }
+    } catch {}
+  }
+  cache.set(cacheKey, DEFAULT_SUGGESTED_QUESTIONS, 60000);
+  return DEFAULT_SUGGESTED_QUESTIONS;
 }

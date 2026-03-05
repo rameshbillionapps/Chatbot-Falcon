@@ -102,7 +102,7 @@ export async function registerRoutes(
 
       res.json({
         session,
-        suggestedQuestions: getSuggestedQuestions(),
+        suggestedQuestions: await getSuggestedQuestions(),
       });
     } catch (error: any) {
       console.error("Session creation error:", error);

@@ -217,6 +217,13 @@ export async function seedDatabase() {
     { key: "welcome_message", value: "Hi! I'm your Supplier Assistant. I can help you with product information, pricing, fabric details, printing methods, and much more. How can I assist you today?" },
     { key: "system_prompt", value: "You are a helpful supplier assistant for garment manufacturing companies." },
     { key: "openai_model", value: "gpt-5.2" },
+    { key: "suggested_questions", value: JSON.stringify([
+      "What types of T-shirts do you manufacture?",
+      "What are the available GSM options for polo T-shirts?",
+      "How do I place a bulk order for caps?",
+      "What printing methods do you offer?",
+      "What is the minimum order quantity?",
+    ]) },
   ];
 
   for (const setting of defaultSettings) {
