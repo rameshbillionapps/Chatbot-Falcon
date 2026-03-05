@@ -164,6 +164,9 @@ export async function seedDatabase() {
     { title: "Caps & T-Shirts Range", type: "image", url: "https://falconheadgear.com/wp-content/uploads/2026/02/Caps-T-Shirts-1024x597.webp", description: "Complete caps and T-shirts range", category: "products" },
     { title: "Creative Designs Service", type: "image", url: "https://falconheadgear.com/wp-content/uploads/2026/02/Creative-Designs-1024x597.webp", description: "Our creative design capabilities", category: "company" },
     { title: "Fast Delivery Service", type: "image", url: "https://falconheadgear.com/wp-content/uploads/2026/02/Fast-Delivery-1024x597.webp", description: "Quick production and delivery", category: "company" },
+    { title: "T-Shirt Printing Process", type: "video", url: "https://www.youtube.com/watch?v=4uHTfGLxiHs", description: "How screen printing works on T-shirts", category: "printing" },
+    { title: "Cap Manufacturing Process", type: "video", url: "https://www.youtube.com/watch?v=R2bLNkCqMTY", description: "How caps are manufactured in a factory", category: "process" },
+    { title: "T-Shirt Manufacturing in Tiruppur", type: "video", url: "https://www.youtube.com/watch?v=DqGLNHvCFSE", description: "T-shirt manufacturing process in Tiruppur, India", category: "process" },
   ];
 
   for (let i = 0; i < 15; i++) {
@@ -181,9 +184,16 @@ export async function seedDatabase() {
   const companyArticle = createdArticles.find(a => a.title.includes("About Falcon"));
   const uniformArticle = createdArticles.find(a => a.title.includes("Uniform"));
 
+  const printingArticle = createdArticles.find(a => a.title.includes("Printing"));
+  const processArticle = createdArticles.find(a => a.title.includes("Production Process"));
+
   for (const m of media) {
     let articleId = null;
-    if (m.category === "products" && m.title.toLowerCase().includes("cap")) {
+    if (m.category === "printing") {
+      articleId = printingArticle?.id;
+    } else if (m.category === "process") {
+      articleId = processArticle?.id;
+    } else if (m.category === "products" && m.title.toLowerCase().includes("cap")) {
       articleId = capsArticle?.id;
     } else if (m.category === "products" && m.title.toLowerCase().includes("t-shirt")) {
       articleId = tshirtArticle?.id;

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MessageCircle, User, FileText, Download, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
+import { MessageCircle, User, FileText, Download, Play, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion } from "framer-motion";
 
 export interface MediaAttachment {
@@ -14,6 +14,18 @@ export interface Message {
   content: string;
   timestamp: string;
   mediaAttachments?: MediaAttachment[];
+}
+
+function extractYouTubeId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
 }
 
 function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
@@ -100,24 +112,45 @@ function MediaCarousel({ media }: { media: MediaAttachment[] }) {
         </a>
       ))}
 
-      {videos.map((video, i) => (
-        <a
-          key={i}
-          href={video.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 p-2.5 rounded-lg border border-border bg-card hover-elevate transition-all"
-          data-testid={`link-video-${i}`}
-        >
-          <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
-            <ExternalLink className="w-4.5 h-4.5 text-primary" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium truncate">{video.title}</p>
-            <p className="text-[10px] text-muted-foreground">Video</p>
-          </div>
-        </a>
-      ))}
+      {videos.map((video, i) => {
+        const youtubeId = extractYouTubeId(video.url);
+        if (youtubeId) {
+          return (
+            <div key={i} className="rounded-lg overflow-hidden border border-border" data-testid={`video-embed-${i}`}>
+              <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
+                <iframe
+                  className="absolute inset-0 w-full h-full"
+                  src={`https://www.youtube.com/embed/${youtubeId}`}
+                  title={video.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+              <div className="px-2.5 py-1.5 bg-card">
+                <p className="text-xs font-medium truncate">{video.title}</p>
+              </div>
+            </div>
+          );
+        }
+        return (
+          <a
+            key={i}
+            href={video.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 p-2.5 rounded-lg border border-border bg-card hover-elevate transition-all"
+            data-testid={`link-video-${i}`}
+          >
+            <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <Play className="w-4.5 h-4.5 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium truncate">{video.title}</p>
+              <p className="text-[10px] text-muted-foreground">Video</p>
+            </div>
+          </a>
+        );
+      })}
     </div>
   );
 }
