@@ -28,6 +28,12 @@ function extractYouTubeId(url: string): string | null {
   return null;
 }
 
+function extractInstagramUrl(url: string): string | null {
+  const match = url.match(/instagram\.com\/(reel|p|tv)\/([a-zA-Z0-9_-]+)/);
+  if (match) return `https://www.instagram.com/${match[1]}/${match[2]}/embed/`;
+  return null;
+}
+
 function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
   return (
     <motion.div
@@ -114,6 +120,7 @@ function MediaCarousel({ media }: { media: MediaAttachment[] }) {
 
       {videos.map((video, i) => {
         const youtubeId = extractYouTubeId(video.url);
+        const instaEmbedUrl = extractInstagramUrl(video.url);
         if (youtubeId) {
           return (
             <div key={i} className="rounded-lg overflow-hidden border border-border" data-testid={`video-embed-${i}`}>
@@ -124,6 +131,25 @@ function MediaCarousel({ media }: { media: MediaAttachment[] }) {
                   title={video.title}
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
+                />
+              </div>
+              <div className="px-2.5 py-1.5 bg-card">
+                <p className="text-xs font-medium truncate">{video.title}</p>
+              </div>
+            </div>
+          );
+        }
+        if (instaEmbedUrl) {
+          return (
+            <div key={i} className="rounded-lg overflow-hidden border border-border" data-testid={`video-embed-${i}`}>
+              <div className="relative w-full" style={{ paddingBottom: "120%" }}>
+                <iframe
+                  className="absolute inset-0 w-full h-full"
+                  src={instaEmbedUrl}
+                  title={video.title}
+                  allowFullScreen
+                  scrolling="no"
+                  style={{ border: "none", overflow: "hidden" }}
                 />
               </div>
               <div className="px-2.5 py-1.5 bg-card">
