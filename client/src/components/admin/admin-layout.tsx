@@ -1,5 +1,7 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, BookOpen, Image, MessageSquare, Settings, Code, ArrowLeft } from "lucide-react";
+import { LayoutDashboard, BookOpen, Image, MessageSquare, Settings, Code, ArrowLeft, LogOut } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/use-auth";
 
 const navItems = [
   { href: "/admin", icon: LayoutDashboard, label: "Analytics" },
@@ -11,7 +13,18 @@ const navItems = [
 ];
 
 export function AdminLayout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
+  const { user } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await apiRequest("POST", "/api/auth/logout");
+      queryClient.clear();
+      setLocation("/admin/login");
+    } catch (err) {
+      console.error("Logout failed:", err);
+    }
+  };
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -45,6 +58,21 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
+        <div className="p-2 border-t border-sidebar-border">
+          {user && (
+            <p className="text-xs text-sidebar-foreground/60 px-3 py-1 truncate" data-testid="text-admin-user">
+              Logged in as {user.username}
+            </p>
+          )}
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors w-full cursor-pointer"
+            data-testid="button-logout"
+          >
+            <LogOut className="w-4 h-4" />
+            Sign Out
+          </button>
+        </div>
       </aside>
       <main className="flex-1 overflow-auto">
         <div className="p-6 max-w-5xl">

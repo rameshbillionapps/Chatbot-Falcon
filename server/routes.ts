@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { processChat, getSuggestedQuestions } from "./rag";
 import { seedDatabase } from "./seed";
+import { requireAuth } from "./auth";
 import { insertKnowledgeArticleSchema, insertMediaAssetSchema, insertWidgetConfigSchema } from "@shared/schema";
 import multer from "multer";
 import path from "path";
@@ -117,6 +118,8 @@ export async function registerRoutes(
       res.status(500).json({ error: "Failed to fetch messages" });
     }
   });
+
+  app.use("/api/admin", requireAuth);
 
   app.get("/api/admin/knowledge", async (req, res) => {
     try {

@@ -1,81 +1,74 @@
-# SupplierBot - AI Chatbot for Garment Manufacturers
+# Falcon Head Gear & Meenax T-Shirts - Manufacturer Website with AI Chatbot
 
 ## Overview
-AI-powered chatbot that helps suppliers (buyers/customers) interact with garment manufacturing companies (Falcon Head Gear, Meenax T-shirts) based in Tiruppur, India. Uses RAG with knowledge base content to answer questions about T-shirts, caps, uniforms, fabrics, printing methods, MOQ, care instructions, and ordering. Embeddable on any client website via script tag, GTM, or iframe.
+Garment manufacturer website for Falcon Head Gear and Meenax T-shirts (Tiruppur, India) with an AI-powered chatbot. The chatbot uses RAG to answer supplier queries about products, fabrics, printing, MOQ, care, ordering. Embeddable on client websites via script tag, GTM, or iframe. Admin dashboard behind login.
 
 ## Tech Stack
 - **Frontend:** React + TypeScript + Tailwind CSS + Shadcn UI + Framer Motion + Recharts
 - **Backend:** Express.js + TypeScript
 - **Database:** PostgreSQL (Replit built-in) with Drizzle ORM
-- **AI/LLM:** OpenAI gpt-5.2 via Replit AI Integrations (AI_INTEGRATIONS_OPENAI_API_KEY, AI_INTEGRATIONS_OPENAI_BASE_URL)
+- **Auth:** Passport.js with local strategy, express-session, scrypt password hashing
+- **AI/LLM:** OpenAI gpt-5.2 via Replit AI Integrations
 - **RAG:** PostgreSQL full-text LIKE search with relevance scoring
-- **Caching:** In-memory cache with TTL for knowledge articles and media
+- **Caching:** In-memory cache with TTL
+
+## Authentication
+- Default admin credentials: username=`admin`, password=`admin123`
+- Login page at `/admin/login`
+- All `/api/admin/*` routes protected with `requireAuth` middleware
+- Session-based auth using express-session + passport-local
+- Auth files: `server/auth.ts`, `client/src/hooks/use-auth.ts`, `client/src/pages/admin/login.tsx`
 
 ## Project Structure
 ```
-shared/schema.ts          - Drizzle schema (knowledge_articles, media_assets, chat_sessions, chat_messages, admin_settings, widget_configs, analytics_events)
+shared/schema.ts          - Drizzle schema
 server/
-  index.ts                - Express server entry point
+  index.ts                - Express server entry point (sets up auth before routes)
+  auth.ts                 - Passport.js auth setup, login/logout/me endpoints, admin seeder
   db.ts                   - PostgreSQL connection pool
   cache.ts                - In-memory cache utility
   openai.ts               - OpenAI client (Replit AI Integrations)
   storage.ts              - Database storage layer (IStorage interface)
-  rag.ts                  - RAG engine (search + OpenAI chat completions)
+  rag.ts                  - RAG engine (search + OpenAI, compact response style)
   seed.ts                 - Knowledge base seeder (20 articles + 27 media assets)
-  routes.ts               - API routes (chat, admin CRUD, widget config)
-  vite.ts                 - Vite dev server setup
-  static.ts               - Static file serving (production)
+  routes.ts               - API routes (chat, admin CRUD with requireAuth, widget config)
 client/src/
-  App.tsx                 - Routes: /, /admin/*, 404
+  App.tsx                 - Routes with ProtectedRoute wrapper for admin
+  hooks/use-auth.ts       - Auth hook (GET /api/auth/me)
   pages/
-    home.tsx              - Landing page with chat widget
-    not-found.tsx         - 404 page
-    admin/
-      analytics.tsx       - Analytics dashboard (charts, stats)
-      knowledge.tsx       - Knowledge base CRUD
-      media.tsx            - Media asset manager
-      chat-history.tsx    - Chat session viewer
-      settings.tsx        - Bot settings configuration
-      widgets.tsx         - Widget embed code generator
+    home.tsx              - Manufacturer landing page (products, services, gallery, contact)
+    admin/login.tsx       - Admin login page
+    admin/analytics.tsx   - Analytics dashboard
+    admin/knowledge.tsx   - Knowledge base CRUD
+    admin/media.tsx       - Media asset manager
+    admin/chat-history.tsx - Chat session viewer
+    admin/settings.tsx    - Bot settings
+    admin/widgets.tsx     - Widget embed code generator
   components/
-    chatbot/
-      chat-widget.tsx     - Floating chat widget with animation
-      chat-message.tsx    - Message bubbles with media carousel
-      chat-input.tsx      - Message input with send
-    admin/
-      admin-layout.tsx    - Sidebar navigation layout
-    ui/                   - Shadcn UI components
-client/public/
-  images/instagram/       - 15 Instagram product images
-  uploads/                - User-uploaded media files
+    chatbot/              - Chat widget, messages, input
+    admin/admin-layout.tsx - Sidebar with logout button
+client/public/images/instagram/ - 15 Instagram product images
 ```
 
 ## API Routes
-- `POST /api/chat` - Send message, get AI response with media
+### Public
+- `POST /api/chat` - Send message, get AI response
 - `POST /api/chat/sessions` - Create chat session
-- `GET /api/chat/sessions/:id/messages` - Get session messages
-- `GET /api/admin/knowledge` - List knowledge articles
-- `POST /api/admin/knowledge` - Create article
-- `PUT /api/admin/knowledge/:id` - Update article
-- `DELETE /api/admin/knowledge/:id` - Delete article
-- `GET /api/admin/media` - List media assets
-- `POST /api/admin/media` - Create media by URL
-- `POST /api/admin/media/upload` - Upload file
-- `DELETE /api/admin/media/:id` - Delete media
-- `GET /api/admin/settings` - Get all settings
-- `PUT /api/admin/settings/:key` - Update setting
-- `GET /api/admin/sessions` - List chat sessions
-- `GET /api/admin/sessions/:id/messages` - Get session messages
-- `GET /api/admin/analytics` - Analytics summary
-- `GET/POST/PUT/DELETE /api/admin/widgets` - Widget config CRUD
-- `GET /api/widget/:id/config` - Public widget config (CORS enabled)
+- `GET /api/widget/:id/config` - Widget config (CORS enabled)
+
+### Auth
+- `POST /api/auth/login` - Login (username, password)
+- `POST /api/auth/logout` - Logout
+- `GET /api/auth/me` - Current user
+
+### Admin (all require auth)
+- CRUD: `/api/admin/knowledge`, `/api/admin/media`, `/api/admin/widgets`
+- `POST /api/admin/media/upload` - File upload
+- `GET/PUT /api/admin/settings`
+- `GET /api/admin/sessions`, `/api/admin/analytics`
 
 ## Database
-PostgreSQL with tables: users, knowledge_articles, media_assets, chat_sessions, chat_messages, admin_settings, widget_configs, analytics_events, conversations, messages
-
-## Key Dependencies
-multer (file uploads), framer-motion (animations), recharts (charts), openai, drizzle-orm, @tanstack/react-query, wouter
+PostgreSQL tables: users, knowledge_articles, media_assets, chat_sessions, chat_messages, admin_settings, widget_configs, analytics_events
 
 ## Seeds
-20 knowledge articles covering: products (polo, crew neck, fleece, sublimation, caps, uniforms, customization), fabrics (GSM guide, cotton types), printing methods, care instructions, pricing/MOQ, production process, company info, FAQ, export/shipping, quality control, ordering process
-27 media assets: product images, PDF catalogues, Instagram images
+20 knowledge articles, 27 media assets, default admin user, default widget config
