@@ -169,6 +169,7 @@ export async function seedDatabase() {
     { title: "T-Shirt Manufacturer in Tiruppur", type: "video", url: "https://www.youtube.com/watch?v=1HMnYzDqtxI", description: "T-shirt manufacturing and wholesale in Tiruppur", category: "products" },
     { title: "Corporate T-Shirt Embroidery", type: "video", url: "https://www.youtube.com/watch?v=PNsPxyW4zNM", description: "Corporate T-shirt manufacturing with embroidery in Tiruppur", category: "products" },
     { title: "Falcon Head Gear - Product Showcase", type: "video", url: "https://www.instagram.com/reel/C-AeTg2vYWU/", description: "Product showcase reel from Instagram", category: "products" },
+    { title: "Falcon Head Gear - Instagram Reel", type: "video", url: "https://www.instagram.com/reel/DTU9qupEQC7/", description: "Falcon Head Gear product reel from Instagram", category: "company" },
   ];
 
   for (let i = 0; i < 15; i++) {

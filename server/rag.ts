@@ -87,8 +87,14 @@ export async function processChat(
     content.includes(m.url) || content.includes(m.title)
   );
 
-  const categoryMedia = allMedia.filter(m => !referencedMedia.includes(m));
-  const finalMedia = [...referencedMedia, ...categoryMedia.slice(0, 3)];
+  const remaining = allMedia.filter(m => !referencedMedia.includes(m));
+  const remainingVideos = remaining.filter(m => m.type === "video");
+  const remainingImages = remaining.filter(m => m.type !== "video");
+  const finalMedia = [
+    ...referencedMedia,
+    ...remainingVideos.slice(0, 2),
+    ...remainingImages.slice(0, 3),
+  ];
 
   return {
     content: cleanMediaReferences(content),
