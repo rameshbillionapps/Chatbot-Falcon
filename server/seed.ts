@@ -164,9 +164,10 @@ export async function seedDatabase() {
     { title: "Caps & T-Shirts Range", type: "image", url: "https://falconheadgear.com/wp-content/uploads/2026/02/Caps-T-Shirts-1024x597.webp", description: "Complete caps and T-shirts range", category: "products" },
     { title: "Creative Designs Service", type: "image", url: "https://falconheadgear.com/wp-content/uploads/2026/02/Creative-Designs-1024x597.webp", description: "Our creative design capabilities", category: "company" },
     { title: "Fast Delivery Service", type: "image", url: "https://falconheadgear.com/wp-content/uploads/2026/02/Fast-Delivery-1024x597.webp", description: "Quick production and delivery", category: "company" },
-    { title: "T-Shirt Printing Process", type: "video", url: "https://www.youtube.com/watch?v=4uHTfGLxiHs", description: "How screen printing works on T-shirts", category: "printing" },
-    { title: "Cap Manufacturing Process", type: "video", url: "https://www.youtube.com/watch?v=R2bLNkCqMTY", description: "How caps are manufactured in a factory", category: "process" },
-    { title: "T-Shirt Manufacturing in Tiruppur", type: "video", url: "https://www.youtube.com/watch?v=DqGLNHvCFSE", description: "T-shirt manufacturing process in Tiruppur, India", category: "process" },
+    { title: "Screen Printing T-Shirt Tutorial", type: "video", url: "https://www.youtube.com/watch?v=MXNJpZTyLrI", description: "Step by step screen printing process on T-shirts", category: "printing" },
+    { title: "Textile Manufacturing in Tiruppur", type: "video", url: "https://www.youtube.com/watch?v=n9CS_w_qR-Y", description: "One of the biggest textile manufacturers in Tiruppur", category: "process" },
+    { title: "T-Shirt Manufacturer in Tiruppur", type: "video", url: "https://www.youtube.com/watch?v=1HMnYzDqtxI", description: "T-shirt manufacturing and wholesale in Tiruppur", category: "products" },
+    { title: "Corporate T-Shirt Embroidery", type: "video", url: "https://www.youtube.com/watch?v=PNsPxyW4zNM", description: "Corporate T-shirt manufacturing with embroidery in Tiruppur", category: "products" },
   ];
 
   for (let i = 0; i < 15; i++) {
