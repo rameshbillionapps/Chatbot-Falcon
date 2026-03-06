@@ -4,6 +4,7 @@ import { getOpenAIClient } from "./openai";
 import type { KnowledgeArticle, MediaAsset } from "@shared/schema";
 import fs from "fs";
 import path from "path";
+import { execSync } from "child_process";
 
 const SYSTEM_PROMPT = `You are a friendly supplier assistant for Falcon Head Gear and Meenax T-shirts, garment manufacturers in Tiruppur, India.
 
@@ -80,8 +81,9 @@ OUR PRODUCT RANGE (ONLY these — nothing else):
 - Printed T-shirts (screen print, DTG, embroidery)
 
 RULES:
-- If the image shows a product that matches ANY of the above categories, say clearly: "Yes, we manufacture this product!" Then briefly describe what we offer in that category (GSM options, customization, MOQ, etc).
-- If the image shows something we do NOT manufacture (suits, blazers, formal wear, jeans, sarees, shoes, accessories, bags, etc.), say clearly: "No, we do not manufacture this product." Then list the products we DO manufacture so the customer knows what's available.
+- First, identify the product in the image and name it (e.g. "This is a Baseball Cap", "This is a Polo T-shirt", "This is a Formal Suit").
+- If the image shows a product that matches ANY of the above categories, say clearly: "Yes, we manufacture [product name]!" Then briefly describe what we offer in that category (GSM options, customization, MOQ, etc).
+- If the image shows something we do NOT manufacture, say clearly: "No, we do not manufacture [product name]." Then list ALL the products we DO manufacture so the customer knows what's available.
 - Be direct and confident. Never say "our knowledge base doesn't mention" — just say yes or no.
 - Keep it short — 3-4 sentences max.`;
   }
@@ -100,16 +102,34 @@ RULES:
   }
 
   if (imageUrl) {
-    let imageContent: any = { type: "text", text: userMessage };
     let imagePart: any = null;
 
     try {
       const localPath = path.join(process.cwd(), "client/public", imageUrl);
       if (fs.existsSync(localPath)) {
-        const imageBuffer = fs.readFileSync(localPath);
-        const base64 = imageBuffer.toString("base64");
         const ext = path.extname(localPath).slice(1).toLowerCase();
-        const mime = ext === "jpg" ? "image/jpeg" : ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+        const supportedFormats = ["jpg", "jpeg", "png", "gif", "webp"];
+
+        let finalBuffer: Buffer;
+        let mime: string;
+
+        if (supportedFormats.includes(ext)) {
+          finalBuffer = fs.readFileSync(localPath);
+          mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : ext === "gif" ? "image/gif" : "image/jpeg";
+        } else {
+          const convertedPath = localPath.replace(/\.[^.]+$/, "_converted.png");
+          try {
+            execSync(`convert "${localPath}" "${convertedPath}"`, { timeout: 10000 });
+            finalBuffer = fs.readFileSync(convertedPath);
+            mime = "image/png";
+            try { fs.unlinkSync(convertedPath); } catch {}
+          } catch {
+            finalBuffer = fs.readFileSync(localPath);
+            mime = "image/png";
+          }
+        }
+
+        const base64 = finalBuffer.toString("base64");
         imagePart = { type: "image_url", image_url: { url: `data:${mime};base64,${base64}` } };
       }
     } catch (err) {

@@ -66,7 +66,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/gif,image/webp,image/jpg"
           onChange={handleImageSelect}
           className="hidden"
           data-testid="input-file-upload"
