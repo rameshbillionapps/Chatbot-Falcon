@@ -68,12 +68,22 @@ export async function processChat(
   let imageInstruction = '';
   if (imageUrl) {
     imageInstruction = `\n\nIMAGE ANALYSIS INSTRUCTION:
-The user has uploaded a product image. Analyze the image and determine:
-1. What type of garment/product is shown (T-shirt, polo, cap, uniform, hoodie, etc.)
-2. Compare it against our product catalog from the knowledge base articles above.
-3. If it matches any product we manufacture (T-shirts, polo shirts, crew neck, caps, uniforms, fleece/winter wear, sublimation garments), respond confidently: "Yes, we manufacture this type of product!" and briefly describe our offering for that category.
-4. If it does NOT match our product range, respond honestly: "We don't currently manufacture this type of product." and suggest what similar products we do offer.
-5. Keep the response short and helpful.`;
+The user has uploaded a product image. You must give a clear YES or NO answer.
+
+OUR PRODUCT RANGE (ONLY these — nothing else):
+- Polo T-shirts (uniform/corporate wear)
+- Crew Neck T-shirts (round neck, promotional wear)
+- Fleece / Winter Wear (hoodies, sweatshirts, jackets)
+- Sublimation Printed Garments
+- Custom Caps & Hats (baseball caps, trucker caps, snapbacks)
+- School & Corporate Uniforms (shirts, trousers for uniforms)
+- Printed T-shirts (screen print, DTG, embroidery)
+
+RULES:
+- If the image shows a product that matches ANY of the above categories, say clearly: "Yes, we manufacture this product!" Then briefly describe what we offer in that category (GSM options, customization, MOQ, etc).
+- If the image shows something we do NOT manufacture (suits, blazers, formal wear, jeans, sarees, shoes, accessories, bags, etc.), say clearly: "No, we do not manufacture this product." Then list the products we DO manufacture so the customer knows what's available.
+- Be direct and confident. Never say "our knowledge base doesn't mention" — just say yes or no.
+- Keep it short — 3-4 sentences max.`;
   }
 
   const openai = getOpenAIClient();
