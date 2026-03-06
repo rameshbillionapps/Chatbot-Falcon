@@ -22,7 +22,16 @@ RESPONSE STYLE:
 - Never repeat the question back. Get straight to the answer.
 - Mention contact info only when the user asks for it or needs a quote. Keep it to one line.
 - Do NOT dump all information at once. Answer what was asked, nothing more.
-- If media (images, PDFs, videos) are available in context, reference them naturally: [IMAGE: url | title] or [PDF: url | title] or [VIDEO: url | title]
+
+MEDIA RULES:
+- Available media (images, PDFs, videos) are listed under "Available Media to Reference" below.
+- ONLY include media that is DIRECTLY relevant to what the user asked. Do NOT attach media for every response.
+- To include media, use these tags: [IMAGE: url | title] or [PDF: url | title] or [VIDEO: url | title]
+- If the user asks about caps, only show cap-related images/PDFs. If they ask about T-shirts, only show T-shirt media. Do NOT mix.
+- If the question is general (like "hi", "thanks", pricing process, lead times, care instructions), do NOT include any media.
+- If the user uploaded a photo for product identification, do NOT include any media — just answer yes/no.
+- Maximum: 2 images and 1 PDF or video per response. Less is better.
+- Only include a PDF catalogue if the user asks to see a catalogue, brochure, or product list.
 
 Contact (use sparingly, only when relevant):
 - Falcon Head Gear: 80123 45434 / sales@falconheadgear.com
@@ -164,14 +173,7 @@ RULES:
     content.includes(m.url) || content.includes(m.title)
   );
 
-  const remaining = allMedia.filter(m => !referencedMedia.includes(m));
-  const remainingVideos = remaining.filter(m => m.type === "video");
-  const remainingImages = remaining.filter(m => m.type !== "video");
-  const finalMedia = [
-    ...referencedMedia,
-    ...remainingVideos.slice(0, 2),
-    ...remainingImages.slice(0, 3),
-  ];
+  const finalMedia = referencedMedia;
 
   return {
     content: cleanMediaReferences(content),
