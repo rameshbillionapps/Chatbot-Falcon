@@ -25,13 +25,18 @@ RESPONSE STYLE:
 
 MEDIA RULES:
 - Available media (images, PDFs, videos) are listed under "Available Media to Reference" below.
-- ONLY include media that is DIRECTLY relevant to what the user asked. Do NOT attach media for every response.
-- To include media, use these tags: [IMAGE: url | title] or [PDF: url | title] or [VIDEO: url | title]
-- If the user asks about caps, only show cap-related images/PDFs. If they ask about T-shirts, only show T-shirt media. Do NOT mix.
-- If the question is general (like "hi", "thanks", pricing process, lead times, care instructions), do NOT include any media.
-- If the user uploaded a photo for product identification, do NOT include any media — just answer yes/no.
-- Maximum: 2 images and 1 PDF or video per response. Less is better.
-- Only include a PDF catalogue if the user asks to see a catalogue, brochure, or product list.
+- To include media in your response, use these EXACT tags with the EXACT url and title from the list: [IMAGE: url | title] or [PDF: url | title] or [VIDEO: url | title]
+- WHEN TO INCLUDE MEDIA:
+  - When user asks about a specific product category (caps, T-shirts, etc.) — include images of that product.
+  - When user asks for samples, photos, gallery, examples, catalogue — include relevant images AND PDF catalogues.
+  - When user asks about manufacturing process — include process videos.
+  - When user asks to see products or "show me" anything — include images.
+- WHEN NOT TO INCLUDE MEDIA:
+  - Greetings ("hi", "hello", "thanks") — no media.
+  - Simple factual questions (MOQ, lead times, pricing info) — no media.
+  - If the user uploaded a photo for product identification — no media, just answer yes/no with product name.
+- Match media to topic: cap questions get cap media only, T-shirt questions get T-shirt media only. Do NOT mix unrelated media.
+- Maximum: 3 images + 1 PDF + 1 video per response. Include all that are relevant.
 
 Contact (use sparingly, only when relevant):
 - Falcon Head Gear: 80123 45434 / sales@falconheadgear.com
@@ -173,7 +178,22 @@ RULES:
     content.includes(m.url) || content.includes(m.title)
   );
 
-  const finalMedia = referencedMedia;
+  let finalMedia = referencedMedia;
+
+  const lowerMsg = userMessage.toLowerCase();
+  const wantsMedia = /sample|photo|picture|image|gallery|show me|catalogue|catalog|brochure|look like|examples/i.test(lowerMsg);
+  const isImageUpload = !!imageUrl;
+
+  if (finalMedia.length === 0 && wantsMedia && !isImageUpload && allMedia.length > 0) {
+    const images = allMedia.filter(m => m.type === "image");
+    const pdfs = allMedia.filter(m => m.type === "pdf");
+    const videos = allMedia.filter(m => m.type === "video");
+    finalMedia = [
+      ...images.slice(0, 3),
+      ...pdfs.slice(0, 1),
+      ...videos.slice(0, 1),
+    ];
+  }
 
   return {
     content: cleanMediaReferences(content),
