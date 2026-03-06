@@ -14,6 +14,7 @@ export interface Message {
   content: string;
   timestamp: string;
   mediaAttachments?: MediaAttachment[];
+  imageUrl?: string;
 }
 
 function extractYouTubeId(url: string): string | null {
@@ -200,6 +201,16 @@ export function ChatMessage({ message }: { message: Message }) {
       )}
 
       <div className={`max-w-[85%] ${isUser ? "items-end" : "items-start"}`}>
+        {message.imageUrl && (
+          <div className="mb-1.5">
+            <img
+              src={message.imageUrl}
+              alt="Uploaded"
+              className="w-full max-w-[200px] h-auto rounded-xl border border-border object-cover"
+              data-testid="img-user-upload"
+            />
+          </div>
+        )}
         <div
           className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed ${
             isUser

@@ -32,7 +32,7 @@ export async function registerRoutes(
 
   await seedDatabase();
 
-  app.post("/api/chat", async (req, res) => {
+  app.post("/api/chat", upload.single("image"), async (req, res) => {
     try {
       const { message } = req.body;
       const sessionId = Number(req.body.sessionId);
@@ -45,17 +45,22 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Session not found" });
       }
 
+      let imageUrl: string | null = null;
+      if (req.file) {
+        imageUrl = `/uploads/${req.file.filename}`;
+      }
+
       await storage.createChatMessage({
         sessionId,
         role: "user",
         content: String(message),
-        mediaAttachments: null,
+        mediaAttachments: imageUrl ? [{ type: "image", url: imageUrl, title: "Uploaded image" }] : null,
       });
 
       const history = await storage.getChatMessages(sessionId);
       const sessionHistory = history.map(m => ({ role: m.role, content: m.content }));
 
-      const response = await processChat(String(message), sessionHistory);
+      const response = await processChat(String(message), sessionHistory, imageUrl);
 
       const mediaAttachments = Array.isArray(response.mediaAttachments) ? response.mediaAttachments : [];
       const matchedCategories = Array.isArray(response.matchedCategories) ? response.matchedCategories : [];

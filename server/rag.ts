@@ -2,6 +2,8 @@ import { storage } from "./storage";
 import { cache } from "./cache";
 import { getOpenAIClient } from "./openai";
 import type { KnowledgeArticle, MediaAsset } from "@shared/schema";
+import fs from "fs";
+import path from "path";
 
 const SYSTEM_PROMPT = `You are a friendly supplier assistant for Falcon Head Gear and Meenax T-shirts, garment manufacturers in Tiruppur, India.
 
@@ -34,6 +36,7 @@ export interface ChatResponse {
 export async function processChat(
   userMessage: string,
   sessionHistory: Array<{ role: string; content: string }>,
+  imageUrl?: string | null,
 ): Promise<ChatResponse> {
   const articles = await searchRelevantArticles(userMessage);
   const mediaForArticles = await getMediaForArticles(articles);
@@ -62,17 +65,61 @@ export async function processChat(
     ? `\n\nAvailable Media to Reference:\n${allMedia.map(m => `- [${m.type.toUpperCase()}] ${m.title}: ${m.url}`).join('\n')}`
     : '';
 
+  let imageInstruction = '';
+  if (imageUrl) {
+    imageInstruction = `\n\nIMAGE ANALYSIS INSTRUCTION:
+The user has uploaded a product image. Analyze the image and determine:
+1. What type of garment/product is shown (T-shirt, polo, cap, uniform, hoodie, etc.)
+2. Compare it against our product catalog from the knowledge base articles above.
+3. If it matches any product we manufacture (T-shirts, polo shirts, crew neck, caps, uniforms, fleece/winter wear, sublimation garments), respond confidently: "Yes, we manufacture this type of product!" and briefly describe our offering for that category.
+4. If it does NOT match our product range, respond honestly: "We don't currently manufacture this type of product." and suggest what similar products we do offer.
+5. Keep the response short and helpful.`;
+  }
+
   const openai = getOpenAIClient();
 
+  const systemContent = SYSTEM_PROMPT + contextBlock + mediaBlock + imageInstruction;
+
   const messages: any[] = [
-    { role: "system", content: SYSTEM_PROMPT + contextBlock + mediaBlock },
+    { role: "system", content: systemContent },
   ];
 
   const recentHistory = sessionHistory.slice(-10);
   for (const msg of recentHistory) {
     messages.push({ role: msg.role, content: msg.content });
   }
-  messages.push({ role: "user", content: userMessage });
+
+  if (imageUrl) {
+    let imageContent: any = { type: "text", text: userMessage };
+    let imagePart: any = null;
+
+    try {
+      const localPath = path.join(process.cwd(), "client/public", imageUrl);
+      if (fs.existsSync(localPath)) {
+        const imageBuffer = fs.readFileSync(localPath);
+        const base64 = imageBuffer.toString("base64");
+        const ext = path.extname(localPath).slice(1).toLowerCase();
+        const mime = ext === "jpg" ? "image/jpeg" : ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+        imagePart = { type: "image_url", image_url: { url: `data:${mime};base64,${base64}` } };
+      }
+    } catch (err) {
+      console.error("Failed to read uploaded image:", err);
+    }
+
+    if (imagePart) {
+      messages.push({
+        role: "user",
+        content: [
+          { type: "text", text: userMessage },
+          imagePart,
+        ],
+      });
+    } else {
+      messages.push({ role: "user", content: userMessage });
+    }
+  } else {
+    messages.push({ role: "user", content: userMessage });
+  }
 
   const response = await openai.chat.completions.create({
     model: "gpt-5.2",

@@ -61,25 +61,41 @@ export function ChatWidget() {
     setIsOpen(false);
   };
 
-  const sendMessage = async (text: string) => {
-    if (!session || !text.trim()) return;
+  const sendMessage = async (text: string, image?: File) => {
+    if (!session || (!text.trim() && !image)) return;
+
+    let imagePreviewUrl: string | undefined;
+    if (image) {
+      imagePreviewUrl = URL.createObjectURL(image);
+    }
 
     const userMsg: Message = {
       id: Date.now(),
       role: "user",
       content: text,
       timestamp: new Date().toISOString(),
+      imageUrl: imagePreviewUrl,
     };
     setMessages((prev) => [...prev, userMsg]);
     setIsTyping(true);
     setSuggestedQuestions([]);
 
     try {
-      const res = await apiRequest("POST", "/api/chat", {
-        message: text,
-        sessionId: session.id,
-      });
-      const data = await res.json();
+      let data;
+      if (image) {
+        const formData = new FormData();
+        formData.append("message", text || "Can you identify this product?");
+        formData.append("sessionId", String(session.id));
+        formData.append("image", image);
+        const res = await fetch("/api/chat", { method: "POST", body: formData });
+        data = await res.json();
+      } else {
+        const res = await apiRequest("POST", "/api/chat", {
+          message: text,
+          sessionId: session.id,
+        });
+        data = await res.json();
+      }
 
       const botMsg: Message = {
         id: Date.now() + 1,
@@ -157,7 +173,7 @@ export function ChatWidget() {
                   </div>
                   <h4 className="text-base font-semibold text-foreground mb-2">Welcome!</h4>
                   <p className="text-sm text-muted-foreground mb-6 px-4">
-                    I can help you with product info, pricing, fabrics, printing methods, and more.
+                    I can help you with product info, pricing, fabrics, printing methods, and more. You can also upload a photo to check if we manufacture that product.
                   </p>
                   {suggestedQuestions.length > 0 && (
                     <div className="space-y-2 px-2">

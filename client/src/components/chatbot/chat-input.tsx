@@ -1,19 +1,23 @@
-import { useState } from "react";
-import { Send } from "lucide-react";
+import { useState, useRef } from "react";
+import { Send, ImagePlus, X } from "lucide-react";
 
 interface ChatInputProps {
-  onSend: (message: string) => void;
+  onSend: (message: string, image?: File) => void;
   disabled?: boolean;
 }
 
 export function ChatInput({ onSend, disabled }: ChatInputProps) {
   const [text, setText] = useState("");
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSend = () => {
-    if (text.trim() && !disabled) {
-      onSend(text.trim());
-      setText("");
-    }
+    if ((!text.trim() && !selectedImage) || disabled) return;
+    onSend(text.trim() || "Can you identify this product?", selectedImage || undefined);
+    setText("");
+    setSelectedImage(null);
+    setImagePreview(null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -23,9 +27,58 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
     }
   };
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return;
+    setSelectedImage(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setImagePreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeImage = () => {
+    setSelectedImage(null);
+    setImagePreview(null);
+  };
+
   return (
     <div className="px-3 py-3 border-t border-border bg-background rounded-b-2xl">
+      {imagePreview && (
+        <div className="mb-2 relative inline-block">
+          <img
+            src={imagePreview}
+            alt="Upload preview"
+            className="h-20 w-20 object-cover rounded-lg border border-border"
+            data-testid="img-upload-preview"
+          />
+          <button
+            onClick={removeImage}
+            className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-destructive rounded-full flex items-center justify-center"
+            data-testid="button-remove-image"
+          >
+            <X className="w-3 h-3 text-destructive-foreground" />
+          </button>
+        </div>
+      )}
       <div className="flex items-end gap-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleImageSelect}
+          className="hidden"
+          data-testid="input-file-upload"
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={disabled}
+          className="w-9 h-9 rounded-xl border border-border bg-card flex items-center justify-center disabled:opacity-40 transition-opacity flex-shrink-0 hover:bg-accent"
+          data-testid="button-upload-image"
+        >
+          <ImagePlus className="w-4 h-4 text-muted-foreground" />
+        </button>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -39,7 +92,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
         />
         <button
           onClick={handleSend}
-          disabled={!text.trim() || disabled}
+          disabled={(!text.trim() && !selectedImage) || disabled}
           className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center disabled:opacity-40 transition-opacity flex-shrink-0"
           data-testid="button-send-message"
         >
