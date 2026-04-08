@@ -158,7 +158,7 @@ export default function SettingsPage() {
                     type="password"
                     value={formValues["openai_api_key"] || ""}
                     onChange={(e) => setFormValues(v => ({ ...v, openai_api_key: e.target.value }))}
-                    placeholder="sk-..."
+                    placeholder={formValues["openai_api_key"]?.includes("...") ? "Key is set. Enter new key to replace." : "sk-..."}
                     className="flex-1"
                     data-testid="input-setting-openai_api_key"
                   />
@@ -166,7 +166,14 @@ export default function SettingsPage() {
                     variant="outline"
                     size="sm"
                     className="gap-1.5 flex-shrink-0"
-                    onClick={() => saveMutation.mutate({ key: "openai_api_key", value: formValues["openai_api_key"] || "" })}
+                    onClick={() => {
+                      const val = formValues["openai_api_key"] || "";
+                      if (val.includes("...")) {
+                        toast({ title: "Enter a new API key to save", variant: "destructive" });
+                        return;
+                      }
+                      saveMutation.mutate({ key: "openai_api_key", value: val });
+                    }}
                     disabled={saveMutation.isPending}
                     data-testid="button-save-openai_api_key"
                   >

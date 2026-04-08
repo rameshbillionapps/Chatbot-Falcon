@@ -288,9 +288,13 @@ export async function registerRoutes(
 
   app.put("/api/admin/settings/:key", async (req, res) => {
     try {
-      await storage.setSetting(req.params.key, req.body.value);
+      const { value } = req.body;
+      if (req.params.key === "openai_api_key" && value && value.includes("...")) {
+        return res.json({ success: true });
+      }
+      await storage.setSetting(req.params.key, value);
       if (req.params.key === "openai_api_key") {
-        setEmbeddingApiKey(req.body.value || null);
+        setEmbeddingApiKey(value || null);
       }
       res.json({ success: true });
     } catch (error) {
