@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Upload, Link as LinkIcon, Trash2, Image, FileText, Film, ExternalLink } from "lucide-react";
 import type { MediaAsset } from "@shared/schema";
 
@@ -55,6 +56,15 @@ export default function MediaPage() {
     },
   });
 
+  const deleteAllMutation = useMutation({
+    mutationFn: async () => apiRequest("DELETE", "/api/admin/media"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/media"] });
+      toast({ title: "All media deleted" });
+    },
+    onError: () => toast({ title: "Failed to delete all media", variant: "destructive" }),
+  });
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -82,6 +92,29 @@ export default function MediaPage() {
             <p className="text-sm text-muted-foreground mt-1">{assets.length} media assets</p>
           </div>
           <div className="flex gap-2">
+            {assets.length > 0 && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" size="sm" className="gap-1.5" disabled={deleteAllMutation.isPending} data-testid="button-delete-all-media">
+                    <Trash2 className="w-3.5 h-3.5" /> Delete All
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete all media assets?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently delete all {assets.length} media assets. This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => deleteAllMutation.mutate()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid="button-confirm-delete-all-media">
+                      Delete All
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
             <input ref={fileRef} type="file" className="hidden" onChange={handleFileUpload} accept="image/*,video/*,.pdf" />
             <Button variant="outline" size="sm" className="gap-1.5" onClick={() => fileRef.current?.click()} disabled={uploadMutation.isPending} data-testid="button-upload-file">
               <Upload className="w-3.5 h-3.5" /> Upload File

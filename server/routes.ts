@@ -262,6 +262,15 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/admin/media", async (_req, res) => {
+    try {
+      const count = await storage.deleteAllMediaAssets();
+      res.json({ success: true, deleted: count });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete all media" });
+    }
+  });
+
   app.delete("/api/admin/media/:id", async (req, res) => {
     try {
       await storage.deleteMediaAsset(parseInt(req.params.id));

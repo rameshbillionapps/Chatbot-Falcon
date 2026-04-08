@@ -32,6 +32,7 @@ export interface IStorage {
   getMediaAsset(id: number): Promise<MediaAsset | undefined>;
   createMediaAsset(asset: InsertMediaAsset): Promise<MediaAsset>;
   deleteMediaAsset(id: number): Promise<void>;
+  deleteAllMediaAssets(): Promise<number>;
   getMediaByArticleId(articleId: number): Promise<MediaAsset[]>;
 
   createChatSession(session: InsertChatSession): Promise<ChatSession>;
@@ -197,6 +198,14 @@ export class DatabaseStorage implements IStorage {
 
   async deleteMediaAsset(id: number): Promise<void> {
     await db.delete(mediaAssets).where(eq(mediaAssets.id, id));
+  }
+
+  async deleteAllMediaAssets(): Promise<number> {
+    const allMedia = await db.select({ id: mediaAssets.id }).from(mediaAssets);
+    if (allMedia.length > 0) {
+      await db.delete(mediaAssets);
+    }
+    return allMedia.length;
   }
 
   async getMediaByArticleId(articleId: number): Promise<MediaAsset[]> {
