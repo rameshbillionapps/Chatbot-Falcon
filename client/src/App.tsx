@@ -18,6 +18,7 @@ import MediaPage from "@/pages/admin/media";
 import ChatHistoryPage from "@/pages/admin/chat-history";
 import SettingsPage from "@/pages/admin/settings";
 import WidgetsPage from "@/pages/admin/widgets";
+import ApiDocsPage from "@/pages/admin/api-docs";
 
 const SITE_PASSWORD = "falcon2025";
 
@@ -106,6 +107,7 @@ function Router() {
       <Route path="/admin/chat-history">{() => <ProtectedRoute component={ChatHistoryPage} />}</Route>
       <Route path="/admin/settings">{() => <ProtectedRoute component={SettingsPage} />}</Route>
       <Route path="/admin/widgets">{() => <ProtectedRoute component={WidgetsPage} />}</Route>
+      <Route path="/admin/api-docs">{() => <ProtectedRoute component={ApiDocsPage} />}</Route>
       <Route component={NotFound} />
     </Switch>
   );

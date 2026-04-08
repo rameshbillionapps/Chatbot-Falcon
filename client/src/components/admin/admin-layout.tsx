@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, BookOpen, Image, MessageSquare, Settings, Code, ArrowLeft, LogOut } from "lucide-react";
+import { LayoutDashboard, BookOpen, Image, MessageSquare, Settings, Code, ArrowLeft, LogOut, Plug } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -9,6 +9,7 @@ const navItems = [
   { href: "/admin/media", icon: Image, label: "Media" },
   { href: "/admin/chat-history", icon: MessageSquare, label: "Chat History" },
   { href: "/admin/widgets", icon: Code, label: "Widgets" },
+  { href: "/admin/api-docs", icon: Plug, label: "API Integration" },
   { href: "/admin/settings", icon: Settings, label: "Settings" },
 ];
 

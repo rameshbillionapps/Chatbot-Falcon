@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Plus, Pencil, Trash2, Search, BookOpen } from "lucide-react";
 import type { KnowledgeArticle } from "@shared/schema";
 
@@ -56,6 +57,18 @@ export default function KnowledgePage() {
     },
   });
 
+  const deleteAllMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("DELETE", "/api/admin/knowledge/all");
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/knowledge"] });
+      toast({ title: `Deleted ${data?.deleted || "all"} articles` });
+    },
+    onError: () => toast({ title: "Failed to delete articles", variant: "destructive" }),
+  });
+
   const resetForm = () => {
     setForm({ title: "", content: "", category: "products", sourceUrl: "", tags: "", isActive: true });
     setEditing(null);
@@ -89,6 +102,34 @@ export default function KnowledgePage() {
             <h1 className="text-2xl font-bold text-foreground" data-testid="text-page-title">Knowledge Base</h1>
             <p className="text-sm text-muted-foreground mt-1">{articles.length} articles in the knowledge base</p>
           </div>
+          <div className="flex items-center gap-2">
+            {articles.length > 0 && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button size="sm" variant="destructive" className="gap-1.5" disabled={deleteAllMutation.isPending} data-testid="button-delete-all">
+                    <Trash2 className="w-3.5 h-3.5" /> {deleteAllMutation.isPending ? "Deleting..." : "Delete All"}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete all articles?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently delete all {articles.length} knowledge base articles. This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel data-testid="button-cancel-delete-all">Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => deleteAllMutation.mutate()}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      data-testid="button-confirm-delete-all"
+                    >
+                      Delete All
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
           <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) resetForm(); setDialogOpen(open); }}>
             <DialogTrigger asChild>
               <Button size="sm" className="gap-1.5" data-testid="button-add-article">
@@ -145,6 +186,7 @@ export default function KnowledgePage() {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3">

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Save, Plus, Trash2, GripVertical } from "lucide-react";
+import { Save, Plus, Trash2, GripVertical, Download, Database } from "lucide-react";
 
 interface Setting {
   id: number;
@@ -195,6 +195,34 @@ export default function SettingsPage() {
                     </Button>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+            <Card className="border border-border" data-testid="card-database-backup">
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-primary" />
+                  <CardTitle className="text-sm font-semibold">Database Backup</CardTitle>
+                </div>
+                <p className="text-xs text-muted-foreground">Download a full backup of all data (knowledge base, media, chat history, settings)</p>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => {
+                    const link = document.createElement("a");
+                    link.href = "/api/admin/backup";
+                    link.download = `backup-${new Date().toISOString().split("T")[0]}.json`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    toast({ title: "Backup download started" });
+                  }}
+                  data-testid="button-download-backup"
+                >
+                  <Download className="w-3.5 h-3.5" /> Download Backup
+                </Button>
               </CardContent>
             </Card>
           </div>

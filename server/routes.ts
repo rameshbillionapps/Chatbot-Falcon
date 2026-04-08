@@ -4,7 +4,8 @@ import { storage } from "./storage";
 import { processChat, getSuggestedQuestions } from "./rag";
 import { seedDatabase } from "./seed";
 import { requireAuth } from "./auth";
-import { insertKnowledgeArticleSchema, insertMediaAssetSchema, insertWidgetConfigSchema } from "@shared/schema";
+import { insertKnowledgeArticleSchema, insertMediaAssetSchema, insertWidgetConfigSchema, chatMessages } from "@shared/schema";
+import { db } from "./db";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -164,6 +165,15 @@ export async function registerRoutes(
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Failed to update article" });
+    }
+  });
+
+  app.delete("/api/admin/knowledge/all", async (_req, res) => {
+    try {
+      const count = await storage.deleteAllKnowledgeArticles();
+      res.json({ deleted: count });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete all articles" });
     }
   });
 
@@ -331,6 +341,40 @@ export async function registerRoutes(
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete widget" });
+    }
+  });
+
+  app.get("/api/admin/backup", async (_req, res) => {
+    try {
+      const [articles, media, sessions, messages, settings, widgets] = await Promise.all([
+        storage.getKnowledgeArticles(undefined, false),
+        storage.getMediaAssets(),
+        storage.getChatSessions(),
+        db.select().from(chatMessages).orderBy(chatMessages.timestamp),
+        storage.getAllSettings(),
+        storage.getWidgetConfigs(),
+      ]);
+
+      const backup = {
+        exportedAt: new Date().toISOString(),
+        version: "1.0",
+        data: {
+          knowledge_articles: articles,
+          media_assets: media,
+          chat_sessions: sessions,
+          chat_messages: messages,
+          admin_settings: settings,
+          widget_configs: widgets,
+        },
+      };
+
+      const dateStr = new Date().toISOString().split("T")[0];
+      res.setHeader("Content-Disposition", `attachment; filename="backup-${dateStr}.json"`);
+      res.setHeader("Content-Type", "application/json");
+      res.json(backup);
+    } catch (error) {
+      console.error("Backup error:", error);
+      res.status(500).json({ error: "Failed to create backup" });
     }
   });
 

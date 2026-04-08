@@ -23,6 +23,7 @@ export interface IStorage {
   createKnowledgeArticle(article: InsertKnowledgeArticle): Promise<KnowledgeArticle>;
   updateKnowledgeArticle(id: number, article: Partial<InsertKnowledgeArticle>): Promise<KnowledgeArticle | undefined>;
   deleteKnowledgeArticle(id: number): Promise<void>;
+  deleteAllKnowledgeArticles(): Promise<number>;
   searchKnowledgeArticles(query: string, limit?: number): Promise<KnowledgeArticle[]>;
 
   getMediaAssets(type?: string, articleId?: number): Promise<MediaAsset[]>;
@@ -110,6 +111,14 @@ export class DatabaseStorage implements IStorage {
 
   async deleteKnowledgeArticle(id: number): Promise<void> {
     await db.delete(knowledgeArticles).where(eq(knowledgeArticles.id, id));
+  }
+
+  async deleteAllKnowledgeArticles(): Promise<number> {
+    const allArticles = await db.select({ id: knowledgeArticles.id }).from(knowledgeArticles);
+    if (allArticles.length > 0) {
+      await db.delete(knowledgeArticles);
+    }
+    return allArticles.length;
   }
 
   async searchKnowledgeArticles(query: string, limit = 5): Promise<KnowledgeArticle[]> {
