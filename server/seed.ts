@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { knowledgeArticles, mediaAssets, adminSettings, widgetConfigs } from "@shared/schema";
-import { count, eq } from "drizzle-orm";
+import { count, eq, sql, isNull } from "drizzle-orm";
+import { generateEmbedding } from "./openai";
 
 async function ensureVideoAssets() {
   const existingVideos = await db.select().from(mediaAssets).where(eq(mediaAssets.type, "video"));
@@ -45,6 +46,36 @@ async function ensureSuggestedQuestions() {
   });
 }
 
+async function ensureEmbeddings() {
+  const articlesWithoutEmbeddings = await db.select()
+    .from(knowledgeArticles)
+    .where(isNull(knowledgeArticles.embedding));
+
+  if (articlesWithoutEmbeddings.length === 0) return;
+
+  let generated = 0;
+  let firstError: string | null = null;
+  for (const article of articlesWithoutEmbeddings) {
+    try {
+      const text = `${article.title} ${article.category} ${article.content}`;
+      const embedding = await generateEmbedding(text);
+      const vectorStr = `[${embedding.join(",")}]`;
+      await db.execute(sql`UPDATE knowledge_articles SET embedding = ${vectorStr}::vector WHERE id = ${article.id}`);
+      generated++;
+    } catch (err: unknown) {
+      if (!firstError) {
+        firstError = err instanceof Error ? err.message : String(err);
+      }
+      if (firstError?.includes("No OpenAI API key")) break;
+    }
+  }
+  if (generated > 0) {
+    console.log(`Generated embeddings for ${generated}/${articlesWithoutEmbeddings.length} articles`);
+  } else if (firstError) {
+    console.log(`Embeddings skipped: ${firstError}`);
+  }
+}
+
 export async function seedDatabase() {
   await ensureVideoAssets();
   await ensureSuggestedQuestions();
@@ -52,6 +83,7 @@ export async function seedDatabase() {
   const [existing] = await db.select({ count: count() }).from(knowledgeArticles);
   if (existing.count > 0) {
     console.log("Database already seeded, skipping...");
+    await ensureEmbeddings();
     return;
   }
 
@@ -290,5 +322,6 @@ export async function seedDatabase() {
     });
   }
 
+  await ensureEmbeddings();
   console.log("Database seeding complete!");
 }

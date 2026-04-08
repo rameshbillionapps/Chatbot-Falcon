@@ -25,6 +25,8 @@ export interface IStorage {
   deleteKnowledgeArticle(id: number): Promise<void>;
   deleteAllKnowledgeArticles(): Promise<number>;
   searchKnowledgeArticles(query: string, limit?: number): Promise<KnowledgeArticle[]>;
+  searchByVector(embedding: number[], limit?: number): Promise<KnowledgeArticle[]>;
+  updateArticleEmbedding(id: number, embedding: number[]): Promise<void>;
 
   getMediaAssets(type?: string, articleId?: number): Promise<MediaAsset[]>;
   getMediaAsset(id: number): Promise<MediaAsset | undefined>;
@@ -150,6 +152,24 @@ export class DatabaseStorage implements IStorage {
     .limit(limit);
 
     return results.map(r => r.article);
+  }
+
+  async searchByVector(embedding: number[], limit = 5): Promise<KnowledgeArticle[]> {
+    const vectorStr = `[${embedding.join(",")}]`;
+    const results = await db.select()
+      .from(knowledgeArticles)
+      .where(and(
+        eq(knowledgeArticles.isActive, true),
+        sql`${knowledgeArticles.embedding} IS NOT NULL`
+      ))
+      .orderBy(sql`${knowledgeArticles.embedding} <=> ${vectorStr}::vector`)
+      .limit(limit);
+    return results;
+  }
+
+  async updateArticleEmbedding(id: number, embedding: number[]): Promise<void> {
+    const vectorStr = `[${embedding.join(",")}]`;
+    await db.execute(sql`UPDATE knowledge_articles SET embedding = ${vectorStr}::vector WHERE id = ${id}`);
   }
 
   async getMediaAssets(type?: string, articleId?: number): Promise<MediaAsset[]> {

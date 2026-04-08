@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Save, Plus, Trash2, GripVertical, Download, Database } from "lucide-react";
+import { Save, Plus, Trash2, GripVertical, Download, Database, Key, RefreshCw } from "lucide-react";
 
 interface Setting {
   id: number;
@@ -73,6 +73,17 @@ export default function SettingsPage() {
     setQuestions(updated);
   };
 
+  const regenerateEmbeddings = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/knowledge/regenerate-embeddings");
+      return res.json() as Promise<{ total: number; updated: number }>;
+    },
+    onSuccess: (data) => {
+      toast({ title: `Embeddings regenerated: ${data.updated}/${data.total} articles updated` });
+    },
+    onError: () => toast({ title: "Failed to regenerate embeddings", variant: "destructive" }),
+  });
+
   const settingsConfig = [
     { key: "bot_name", label: "Bot Name", description: "The name displayed in the chatbot header", placeholder: "Supplier Assistant" },
     { key: "welcome_message", label: "Welcome Message", description: "The greeting shown when a user opens the chatbot", placeholder: "Hi! How can I help you?" },
@@ -132,6 +143,61 @@ export default function SettingsPage() {
                 </CardContent>
               </Card>
             ))}
+
+            <Card className="border border-border" data-testid="card-setting-openai_api_key">
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <Key className="w-4 h-4 text-primary" />
+                  <CardTitle className="text-sm font-semibold">OpenAI API Key</CardTitle>
+                </div>
+                <p className="text-xs text-muted-foreground">Required for vector embeddings (semantic search). Uses text-embedding-3-small model. Chat still works via Replit AI Integrations without this key.</p>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-2">
+                  <Input
+                    type="password"
+                    value={formValues["openai_api_key"] || ""}
+                    onChange={(e) => setFormValues(v => ({ ...v, openai_api_key: e.target.value }))}
+                    placeholder="sk-..."
+                    className="flex-1"
+                    data-testid="input-setting-openai_api_key"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 flex-shrink-0"
+                    onClick={() => saveMutation.mutate({ key: "openai_api_key", value: formValues["openai_api_key"] || "" })}
+                    disabled={saveMutation.isPending}
+                    data-testid="button-save-openai_api_key"
+                  >
+                    <Save className="w-3.5 h-3.5" /> Save
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border border-border" data-testid="card-regenerate-embeddings">
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <RefreshCw className="w-4 h-4 text-primary" />
+                  <CardTitle className="text-sm font-semibold">Vector Embeddings</CardTitle>
+                </div>
+                <p className="text-xs text-muted-foreground">Generate or regenerate vector embeddings for all knowledge base articles. Requires OpenAI API key above. Improves search accuracy with semantic matching.</p>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => regenerateEmbeddings.mutate()}
+                  disabled={regenerateEmbeddings.isPending}
+                  data-testid="button-regenerate-embeddings"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${regenerateEmbeddings.isPending ? "animate-spin" : ""}`} />
+                  {regenerateEmbeddings.isPending ? "Generating..." : "Regenerate Embeddings"}
+                </Button>
+              </CardContent>
+            </Card>
 
             <Card className="border border-border" data-testid="card-setting-suggested_questions">
               <CardHeader className="pb-2">

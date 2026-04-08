@@ -3,6 +3,18 @@ import { pgTable, text, varchar, serial, integer, boolean, timestamp, jsonb, ind
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+const vector = customType<{ data: number[]; driverParam: string }>({
+  dataType() {
+    return "vector(1536)";
+  },
+  toDriver(value: number[]): string {
+    return `[${value.join(",")}]`;
+  },
+  fromDriver(value: string): number[] {
+    return JSON.parse(value);
+  },
+});
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
@@ -24,6 +36,7 @@ export const knowledgeArticles = pgTable("knowledge_articles", {
   category: text("category").notNull(),
   sourceUrl: text("source_url"),
   tags: text("tags").array().default(sql`'{}'::text[]`),
+  embedding: vector("embedding"),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
@@ -34,6 +47,7 @@ export const knowledgeArticles = pgTable("knowledge_articles", {
 
 export const insertKnowledgeArticleSchema = createInsertSchema(knowledgeArticles).omit({
   id: true,
+  embedding: true,
   createdAt: true,
   updatedAt: true,
 });

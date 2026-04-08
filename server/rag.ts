@@ -1,6 +1,6 @@
 import { storage } from "./storage";
 import { cache } from "./cache";
-import { getOpenAIClient } from "./openai";
+import { getOpenAIClient, generateEmbedding } from "./openai";
 import type { KnowledgeArticle, MediaAsset } from "@shared/schema";
 import fs from "fs";
 import path from "path";
@@ -106,7 +106,7 @@ RULES:
 
   const systemContent = SYSTEM_PROMPT + contextBlock + mediaBlock + imageInstruction;
 
-  const messages: any[] = [
+  const messages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }> = [
     { role: "system", content: systemContent },
   ];
 
@@ -116,7 +116,7 @@ RULES:
   }
 
   if (imageUrl) {
-    let imagePart: any = null;
+    let imagePart: { type: string; image_url: { url: string } } | null = null;
 
     try {
       const localPath = path.join(process.cwd(), "client/public", imageUrl);
@@ -216,7 +216,18 @@ async function searchRelevantArticles(query: string): Promise<KnowledgeArticle[]
   const cached = cache.get<KnowledgeArticle[]>(cacheKey);
   if (cached) return cached;
 
-  const results = await storage.searchKnowledgeArticles(query, 5);
+  let results: KnowledgeArticle[] = [];
+  try {
+    const queryEmbedding = await generateEmbedding(query);
+    results = await storage.searchByVector(queryEmbedding, 5);
+  } catch (err) {
+    console.error("Vector search failed, falling back to keyword search:", err);
+  }
+
+  if (results.length === 0) {
+    results = await storage.searchKnowledgeArticles(query, 5);
+  }
+
   cache.set(cacheKey, results, 120000);
   return results;
 }

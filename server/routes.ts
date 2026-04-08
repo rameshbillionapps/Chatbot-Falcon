@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { processChat, getSuggestedQuestions } from "./rag";
 import { seedDatabase } from "./seed";
 import { requireAuth } from "./auth";
+import { generateEmbedding, setEmbeddingApiKey } from "./openai";
 import { insertKnowledgeArticleSchema, insertMediaAssetSchema, insertWidgetConfigSchema, chatMessages } from "@shared/schema";
 import { db } from "./db";
 import multer from "multer";
@@ -32,6 +33,11 @@ export async function registerRoutes(
 ): Promise<Server> {
 
   await seedDatabase();
+
+  const savedKey = await storage.getSetting("openai_api_key");
+  if (savedKey) {
+    setEmbeddingApiKey(savedKey);
+  }
 
   app.post("/api/chat", upload.single("image"), async (req, res) => {
     try {
@@ -151,6 +157,9 @@ export async function registerRoutes(
   app.post("/api/admin/knowledge", async (req, res) => {
     try {
       const article = await storage.createKnowledgeArticle(req.body);
+      generateEmbedding(`${article.title} ${article.category} ${article.content}`)
+        .then(emb => storage.updateArticleEmbedding(article.id, emb))
+        .catch(err => console.error("Embedding generation failed for article", article.id, err));
       res.status(201).json(article);
     } catch (error) {
       console.error("Create article error:", error);
@@ -162,13 +171,35 @@ export async function registerRoutes(
     try {
       const updated = await storage.updateKnowledgeArticle(parseInt(req.params.id), req.body);
       if (!updated) return res.status(404).json({ error: "Not found" });
+      generateEmbedding(`${updated.title} ${updated.category} ${updated.content}`)
+        .then(emb => storage.updateArticleEmbedding(updated.id, emb))
+        .catch(err => console.error("Embedding regeneration failed for article", updated.id, err));
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Failed to update article" });
     }
   });
 
-  app.delete("/api/admin/knowledge/all", async (_req, res) => {
+  app.post("/api/admin/knowledge/regenerate-embeddings", async (_req, res) => {
+    try {
+      const articles = await storage.getKnowledgeArticles(undefined, false);
+      let updated = 0;
+      for (const article of articles) {
+        try {
+          const emb = await generateEmbedding(`${article.title} ${article.category} ${article.content}`);
+          await storage.updateArticleEmbedding(article.id, emb);
+          updated++;
+        } catch (err) {
+          console.error("Failed to generate embedding for article", article.id, err);
+        }
+      }
+      res.json({ total: articles.length, updated });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to regenerate embeddings" });
+    }
+  });
+
+  app.delete("/api/admin/knowledge", async (_req, res) => {
     try {
       const count = await storage.deleteAllKnowledgeArticles();
       res.json({ deleted: count });
@@ -243,7 +274,13 @@ export async function registerRoutes(
   app.get("/api/admin/settings", async (_req, res) => {
     try {
       const settings = await storage.getAllSettings();
-      res.json(settings);
+      const masked = settings.map(s => {
+        if (s.key === "openai_api_key" && s.value) {
+          return { ...s, value: s.value.slice(0, 7) + "..." + s.value.slice(-4) };
+        }
+        return s;
+      });
+      res.json(masked);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch settings" });
     }
@@ -252,6 +289,9 @@ export async function registerRoutes(
   app.put("/api/admin/settings/:key", async (req, res) => {
     try {
       await storage.setSetting(req.params.key, req.body.value);
+      if (req.params.key === "openai_api_key") {
+        setEmbeddingApiKey(req.body.value || null);
+      }
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to update setting" });
@@ -355,6 +395,13 @@ export async function registerRoutes(
         storage.getWidgetConfigs(),
       ]);
 
+      const maskedSettings = settings.map(s => {
+        if (s.key === "openai_api_key" && s.value) {
+          return { ...s, value: "[REDACTED]" };
+        }
+        return s;
+      });
+
       const backup = {
         exportedAt: new Date().toISOString(),
         version: "1.0",
@@ -363,7 +410,7 @@ export async function registerRoutes(
           media_assets: media,
           chat_sessions: sessions,
           chat_messages: messages,
-          admin_settings: settings,
+          admin_settings: maskedSettings,
           widget_configs: widgets,
         },
       };

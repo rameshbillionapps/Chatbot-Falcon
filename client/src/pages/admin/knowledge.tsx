@@ -59,12 +59,12 @@ export default function KnowledgePage() {
 
   const deleteAllMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("DELETE", "/api/admin/knowledge/all");
-      return res.json();
+      const res = await apiRequest("DELETE", "/api/admin/knowledge");
+      return res.json() as Promise<{ deleted: number }>;
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/knowledge"] });
-      toast({ title: `Deleted ${data?.deleted || "all"} articles` });
+      toast({ title: `Deleted ${data.deleted} articles` });
     },
     onError: () => toast({ title: "Failed to delete articles", variant: "destructive" }),
   });

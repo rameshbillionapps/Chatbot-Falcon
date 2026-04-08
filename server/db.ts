@@ -7,3 +7,7 @@ export const pool = new pg.Pool({
 });
 
 export const db = drizzle(pool, { schema });
+
+pool.query("CREATE EXTENSION IF NOT EXISTS vector").catch((err) => {
+  console.error("Failed to enable pgvector extension:", err);
+});
