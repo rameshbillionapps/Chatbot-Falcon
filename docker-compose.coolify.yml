@@ -1,9 +1,15 @@
-# Coolify deployment — defines both app and DB on the same internal network.
-# Set these env vars in Coolify's Environment tab:
-#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
-#   SESSION_SECRET, OPENAI_API_KEY
+# Coolify deployment — app + DB on the same internal Docker network.
 #
-# DATABASE_URL is NOT needed as an env var — it's built from the above vars internally.
+# Set these env vars in Coolify's Environment tab (all Runtime):
+#
+#   POSTGRES_USER      = chatbot
+#   POSTGRES_PASSWORD  = <your password>
+#   POSTGRES_DB        = chatbot
+#   DATABASE_URL       = postgresql://chatbot:<your password>@db:5432/chatbot
+#                        ^^^ use "db" as hostname — that's the internal service name
+#   SESSION_SECRET     = <run: openssl rand -hex 32>
+#   OPENAI_API_KEY     = sk-...
+#
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -28,8 +34,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      # Connects to the db service internally — no external URL needed
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DATABASE_URL: ${DATABASE_URL}
       SESSION_SECRET: ${SESSION_SECRET}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       NODE_ENV: production
