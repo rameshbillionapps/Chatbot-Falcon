@@ -19,7 +19,13 @@ RUN apk add --no-cache ffmpeg
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
+# App bundle
 COPY --from=builder /app/dist ./dist
+
+# drizzle-kit needs these at runtime for db:push
+COPY --from=builder /app/drizzle.config.ts ./
+COPY --from=builder /app/shared ./shared
+COPY --from=builder /app/tsconfig.json ./
 
 EXPOSE 5000
 ENV NODE_ENV=production
