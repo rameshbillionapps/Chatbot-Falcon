@@ -1,11 +1,11 @@
 # Coolify deployment — app + DB on the same internal Docker network.
 #
-# Only 2 env vars needed in Coolify's Environment tab (both Runtime):
-#
+# Required env vars in Coolify (Runtime only):
 #   SESSION_SECRET  = <run: openssl rand -hex 32>
 #   OPENAI_API_KEY  = sk-...
 #
-# DB credentials are internal-only (not exposed outside Docker network).
+# All other variables have safe defaults and do NOT need to be set.
+# SERVICE_FQDN_APP is auto-managed by Coolify — do not touch it.
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -30,7 +30,8 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://chatbot:chatbot@db:5432/chatbot
+      # Falls back to internal db service if DATABASE_URL is not set in Coolify
+      DATABASE_URL: ${DATABASE_URL:-postgresql://chatbot:chatbot@db:5432/chatbot}
       SESSION_SECRET: ${SESSION_SECRET}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       NODE_ENV: production
