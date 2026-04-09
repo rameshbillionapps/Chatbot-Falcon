@@ -1,28 +1,24 @@
 # Coolify deployment — app + DB on the same internal Docker network.
 #
-# Set these env vars in Coolify's Environment tab (all Runtime):
+# Only 2 env vars needed in Coolify's Environment tab (both Runtime):
 #
-#   POSTGRES_USER      = chatbot
-#   POSTGRES_PASSWORD  = <your password>
-#   POSTGRES_DB        = chatbot
-#   DATABASE_URL       = postgresql://chatbot:<your password>@db:5432/chatbot
-#                        ^^^ use "db" as hostname — that's the internal service name
-#   SESSION_SECRET     = <run: openssl rand -hex 32>
-#   OPENAI_API_KEY     = sk-...
+#   SESSION_SECRET  = <run: openssl rand -hex 32>
+#   OPENAI_API_KEY  = sk-...
 #
+# DB credentials are internal-only (not exposed outside Docker network).
 services:
   db:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: chatbot
+      POSTGRES_PASSWORD: chatbot
+      POSTGRES_DB: chatbot
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./docker/initdb:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U chatbot -d chatbot"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -34,13 +30,11 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL: postgresql://chatbot:chatbot@db:5432/chatbot
       SESSION_SECRET: ${SESSION_SECRET}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       NODE_ENV: production
       PORT: 5000
-    ports:
-      - "5000:5000"
     command: sh -c "npm run db:push && node dist/index.cjs"
 
 volumes:
