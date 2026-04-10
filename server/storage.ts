@@ -2,7 +2,7 @@ import { db } from "./db";
 import { eq, desc, sql, and, ilike, gte, lte, count } from "drizzle-orm";
 import {
   users, knowledgeArticles, mediaAssets, chatSessions, chatMessages,
-  adminSettings, widgetConfigs, analyticsEvents,
+  adminSettings, widgetConfigs, analyticsEvents, knowledgeGaps,
   type User, type InsertUser,
   type KnowledgeArticle, type InsertKnowledgeArticle,
   type MediaAsset, type InsertMediaAsset,
@@ -11,6 +11,7 @@ import {
   type AdminSetting, type InsertAdminSetting,
   type WidgetConfig, type InsertWidgetConfig,
   type AnalyticsEvent, type InsertAnalyticsEvent,
+  type KnowledgeGap,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -53,6 +54,11 @@ export interface IStorage {
   createWidgetConfig(config: InsertWidgetConfig): Promise<WidgetConfig>;
   updateWidgetConfig(id: number, config: Partial<InsertWidgetConfig>): Promise<WidgetConfig | undefined>;
   deleteWidgetConfig(id: number): Promise<void>;
+
+  recordKnowledgeGap(question: string, sessionId?: number): Promise<void>;
+  getKnowledgeGaps(resolvedOnly?: boolean): Promise<KnowledgeGap[]>;
+  resolveKnowledgeGap(id: number): Promise<void>;
+  deleteKnowledgeGap(id: number): Promise<void>;
 
   createAnalyticsEvent(event: InsertAnalyticsEvent): Promise<void>;
   getAnalyticsSummary(fromDate?: Date, toDate?: Date): Promise<{
@@ -382,6 +388,52 @@ export class DatabaseStorage implements IStorage {
         count: s.count,
       })),
     };
+  }
+
+  async recordKnowledgeGap(question: string, sessionId?: number): Promise<void> {
+    // Normalize: lowercase, trim, collapse whitespace
+    const normalized = question.toLowerCase().trim().replace(/\s+/g, " ");
+
+    // Check for an existing near-identical question (exact normalized match)
+    const [existing] = await db
+      .select()
+      .from(knowledgeGaps)
+      .where(eq(knowledgeGaps.question, normalized))
+      .limit(1);
+
+    if (existing) {
+      await db
+        .update(knowledgeGaps)
+        .set({
+          count: existing.count + 1,
+          lastAskedAt: new Date(),
+        })
+        .where(eq(knowledgeGaps.id, existing.id));
+    } else {
+      await db.insert(knowledgeGaps).values({
+        question: normalized,
+        sessionId: sessionId ?? null,
+      });
+    }
+  }
+
+  async getKnowledgeGaps(resolvedOnly = false): Promise<KnowledgeGap[]> {
+    return db
+      .select()
+      .from(knowledgeGaps)
+      .where(eq(knowledgeGaps.resolved, resolvedOnly))
+      .orderBy(desc(knowledgeGaps.count), desc(knowledgeGaps.lastAskedAt));
+  }
+
+  async resolveKnowledgeGap(id: number): Promise<void> {
+    await db
+      .update(knowledgeGaps)
+      .set({ resolved: true })
+      .where(eq(knowledgeGaps.id, id));
+  }
+
+  async deleteKnowledgeGap(id: number): Promise<void> {
+    await db.delete(knowledgeGaps).where(eq(knowledgeGaps.id, id));
   }
 }
 

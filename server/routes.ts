@@ -5,6 +5,7 @@ import { processChat, getSuggestedQuestions } from "./rag";
 import { seedDatabase } from "./seed";
 import { requireAuth } from "./auth";
 import { generateEmbedding, setEmbeddingApiKey } from "./openai";
+import { sendWhatsAppTemplate, sendWhatsAppText, fetchMetaLead } from "./whatsapp";
 import { insertKnowledgeArticleSchema, insertMediaAssetSchema, insertWidgetConfigSchema, chatMessages } from "@shared/schema";
 import { db } from "./db";
 import multer from "multer";
@@ -39,6 +40,198 @@ export async function registerRoutes(
     setEmbeddingApiKey(savedKey);
   }
 
+  // ── Public settings (no auth) ────────────────────────────────────────────
+  const PUBLIC_SETTING_KEYS = [
+    "brand_name", "brand_tagline", "brand_location", "brand_address",
+    "brand_whatsapp", "contact_phone", "contact_email",
+    "social_instagram", "social_facebook", "social_linkedin",
+    "home_hero_title", "home_hero_description",
+    "bot_name", "welcome_message",
+  ];
+
+  app.get("/api/public/settings", async (_req, res) => {
+    try {
+      const all = await storage.getAllSettings();
+      const pub: Record<string, string> = {};
+      for (const s of all) {
+        if (PUBLIC_SETTING_KEYS.includes(s.key)) pub[s.key] = s.value || "";
+      }
+      // expose whether site password is set (not the value itself)
+      const sitePass = all.find(s => s.key === "site_password");
+      pub["site_password_enabled"] = sitePass?.value ? "true" : "false";
+      res.json(pub);
+    } catch {
+      res.status(500).json({ error: "Failed to fetch settings" });
+    }
+  });
+
+  app.post("/api/auth/site-unlock", async (req, res) => {
+    try {
+      const { password } = req.body;
+      const stored = await storage.getSetting("site_password");
+      if (!stored) return res.json({ success: true }); // no gate configured
+      if (password === stored) return res.json({ success: true });
+      res.status(401).json({ success: false });
+    } catch {
+      res.status(500).json({ error: "Failed to verify password" });
+    }
+  });
+
+  app.get("/api/public/articles", async (req, res) => {
+    try {
+      const category = req.query.category as string | undefined;
+      const articles = await storage.getKnowledgeArticles(category, true);
+      res.json(articles.map(a => ({
+        id: a.id, title: a.title, content: a.content,
+        category: a.category, tags: a.tags,
+      })));
+    } catch {
+      res.status(500).json({ error: "Failed to fetch articles" });
+    }
+  });
+
+  app.get("/api/public/media", async (req, res) => {
+    try {
+      const type = req.query.type as string | undefined;
+      const assets = await storage.getMediaAssets(type);
+      res.json(assets.map(m => ({
+        id: m.id, title: m.title, type: m.type,
+        url: m.url, category: m.category,
+        knowledgeArticleId: m.knowledgeArticleId,
+      })));
+    } catch {
+      res.status(500).json({ error: "Failed to fetch media" });
+    }
+  });
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // ── Meta Webhooks ─────────────────────────────────────────────────────────
+
+  // Webhook verification handshake (Meta calls this when you first register)
+  app.get("/api/webhooks/meta", async (req, res) => {
+    try {
+      const mode = req.query["hub.mode"];
+      const token = req.query["hub.verify_token"];
+      const challenge = req.query["hub.challenge"];
+      const storedToken = await storage.getSetting("meta_verify_token");
+      if (mode === "subscribe" && token === storedToken) {
+        return res.status(200).send(challenge);
+      }
+      res.sendStatus(403);
+    } catch {
+      res.sendStatus(500);
+    }
+  });
+
+  // Receive lead + message events from Meta
+  app.post("/api/webhooks/meta", async (req, res) => {
+    // Always ack immediately — Meta retries if you don't respond within 20s
+    res.sendStatus(200);
+
+    try {
+      const body = req.body as Record<string, any>;
+
+      if (body.object === "page") {
+        // Lead Ad form submission
+        for (const entry of body.entry || []) {
+          for (const change of entry.changes || []) {
+            if (change.field === "leadgen") {
+              handleMetaLead(change.value).catch(err =>
+                console.error("handleMetaLead error:", err)
+              );
+            }
+          }
+        }
+      } else if (body.object === "whatsapp_business_account") {
+        // Inbound WhatsApp reply
+        for (const entry of body.entry || []) {
+          for (const change of entry.changes || []) {
+            if (change.field === "messages") {
+              handleWhatsAppInbound(change.value).catch(err =>
+                console.error("handleWhatsAppInbound error:", err)
+              );
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Meta webhook processing error:", err);
+    }
+  });
+
+  async function handleMetaLead(value: any) {
+    const accessToken = await storage.getSetting("meta_access_token");
+    if (!accessToken) {
+      console.warn("meta_access_token not set — cannot process Meta lead");
+      return;
+    }
+
+    const leadgenId: string = value.leadgen_id;
+    if (!leadgenId) return;
+
+    // Fetch lead details from Graph API and send WhatsApp template
+    const leadData = await fetchMetaLead(leadgenId, accessToken);
+    if (leadData.phone) {
+      try {
+        await sendWhatsAppTemplate(leadData.phone, leadData.name || "there");
+      } catch (err) {
+        console.error("WhatsApp template send failed for lead:", err);
+      }
+    }
+  }
+
+  async function handleWhatsAppInbound(value: any) {
+    const messages = value.messages;
+    if (!Array.isArray(messages) || messages.length === 0) return;
+
+    for (const msg of messages) {
+      if (msg.type !== "text") continue;
+
+      const phone: string = msg.from;
+      const text: string = msg.text?.body || "";
+      if (!text.trim()) continue;
+
+      // Find or create a chat session keyed to this phone number
+      let session = (await storage.getChatSessions()).find(
+        s => s.visitorId === `wa:${phone}`
+      );
+      if (!session) {
+        session = await storage.createChatSession({
+          visitorId: `wa:${phone}`,
+          visitorName: null,
+          visitorEmail: null,
+          sourceDomain: "whatsapp",
+        });
+      }
+
+      // Save user message
+      await storage.createChatMessage({
+        sessionId: session.id,
+        role: "user",
+        content: text,
+        mediaAttachments: null,
+      });
+
+      // Get history and process through RAG
+      const history = await storage.getChatMessages(session.id);
+      const sessionHistory = history.map(m => ({ role: m.role, content: m.content }));
+      const response = await processChat(text, sessionHistory, null, session.id);
+
+      // Save assistant message
+      await storage.createChatMessage({
+        sessionId: session.id,
+        role: "assistant",
+        content: response.content,
+        mediaAttachments: null,
+      });
+      await storage.updateSessionLastMessage(session.id);
+
+      // Send reply via WhatsApp
+      await sendWhatsAppText(phone, response.content);
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   app.post("/api/chat", upload.single("image"), async (req, res) => {
     try {
       const { message } = req.body;
@@ -67,7 +260,7 @@ export async function registerRoutes(
       const history = await storage.getChatMessages(sessionId);
       const sessionHistory = history.map(m => ({ role: m.role, content: m.content }));
 
-      const response = await processChat(String(message), sessionHistory, imageUrl);
+      const response = await processChat(String(message), sessionHistory, imageUrl, sessionId);
 
       const mediaAttachments = Array.isArray(response.mediaAttachments) ? response.mediaAttachments : [];
       const matchedCategories = Array.isArray(response.matchedCategories) ? response.matchedCategories : [];
@@ -336,6 +529,34 @@ export async function registerRoutes(
       res.json(messages);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch messages" });
+    }
+  });
+
+  app.get("/api/admin/knowledge-gaps", async (req, res) => {
+    try {
+      const resolved = req.query.resolved === "true";
+      const gaps = await storage.getKnowledgeGaps(resolved);
+      res.json(gaps);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch knowledge gaps" });
+    }
+  });
+
+  app.patch("/api/admin/knowledge-gaps/:id/resolve", async (req, res) => {
+    try {
+      await storage.resolveKnowledgeGap(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to resolve gap" });
+    }
+  });
+
+  app.delete("/api/admin/knowledge-gaps/:id", async (req, res) => {
+    try {
+      await storage.deleteKnowledgeGap(parseInt(req.params.id));
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete gap" });
     }
   });
 

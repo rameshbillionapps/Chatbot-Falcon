@@ -6,13 +6,7 @@ import fs from "fs";
 import path from "path";
 import { execSync } from "child_process";
 
-const SYSTEM_PROMPT = `You are a friendly supplier assistant for Falcon Head Gear and Meenax T-shirts, garment manufacturers in Tiruppur, India.
-
-CRITICAL RULE — ONLY USE PROVIDED DATA:
-- You MUST answer ONLY based on the knowledge base articles provided below under "Relevant Knowledge Base Articles".
-- If the knowledge base does NOT contain the information needed to answer the question, respond with something like: "I'm sorry, I don't have that information in our knowledge base right now. Please reach out to our team for help — WhatsApp +91 8825452704 or email sales@falconheadgear.com."
-- NEVER make up, guess, or invent information that is not in the provided articles. This is extremely important.
-- If the articles only partially cover the question, answer with what is available and mention that for more details they should contact the team.
+const STATIC_RULES = `
 
 RESPONSE STYLE:
 - Keep responses SHORT and conversational — 2-4 sentences max for simple questions.
@@ -27,7 +21,7 @@ MEDIA RULES:
 - Available media (images, PDFs, videos) are listed under "Available Media to Reference" below.
 - To include media in your response, use these EXACT tags with the EXACT url and title from the list: [IMAGE: url | title] or [PDF: url | title] or [VIDEO: url | title]
 - WHEN TO INCLUDE MEDIA:
-  - When user asks about a specific product category (caps, T-shirts, etc.) — include images of that product.
+  - When user asks about a specific product category — include images of that product.
   - When user asks for samples, photos, gallery, examples, catalogue — include relevant images AND PDF catalogues.
   - When user asks about manufacturing process — include process videos.
   - When user asks to see products or "show me" anything — include images.
@@ -35,12 +29,39 @@ MEDIA RULES:
   - Greetings ("hi", "hello", "thanks") — no media.
   - Simple factual questions (MOQ, lead times, pricing info) — no media.
   - If the user uploaded a photo for product identification — no media, just answer yes/no with product name.
-- Match media to topic: cap questions get cap media only, T-shirt questions get T-shirt media only. Do NOT mix unrelated media.
-- Maximum: 3 images + 1 PDF + 1 video per response. Include all that are relevant.
+- Match media to topic. Do NOT mix unrelated media.
+- Maximum: 3 images + 1 PDF + 1 video per response. Include all that are relevant.`;
 
-Contact (use sparingly, only when relevant):
-- Falcon Head Gear: 80123 45434 / sales@falconheadgear.com
-- Meenax T-shirts: WhatsApp +91 8825452704`;
+async function getRagConfig() {
+  const [systemPrompt, contactPhone, contactEmail, model] = await Promise.all([
+    storage.getSetting("system_prompt"),
+    storage.getSetting("contact_phone"),
+    storage.getSetting("contact_email"),
+    storage.getSetting("openai_model"),
+  ]);
+
+  const contactLines = [
+    contactPhone ? `Phone/WhatsApp: ${contactPhone}` : "",
+    contactEmail ? `Email: ${contactEmail}` : "",
+  ].filter(Boolean);
+
+  const contactSection = contactLines.length
+    ? `\n\nContact (use sparingly, only when relevant):\n${contactLines.join("\n")}`
+    : "";
+
+  const fallbackMsg = contactLines.length
+    ? `I'm sorry, I don't have that information in our knowledge base right now. Please reach out to our team — ${contactLines.join(" / ")}.`
+    : "I'm sorry, I don't have that information in our knowledge base right now. Please contact our team for help.";
+
+  const basePrompt = systemPrompt || "You are a helpful assistant.";
+  const fullSystemPrompt = basePrompt + STATIC_RULES + contactSection;
+
+  return {
+    systemPrompt: fullSystemPrompt,
+    fallbackMsg,
+    model: model || "gpt-4o-mini",
+  };
+}
 
 export interface ChatResponse {
   content: string;
@@ -52,6 +73,7 @@ export async function processChat(
   userMessage: string,
   sessionHistory: Array<{ role: string; content: string }>,
   imageUrl?: string | null,
+  sessionId?: number,
 ): Promise<ChatResponse> {
   const articles = await searchRelevantArticles(userMessage);
   const mediaForArticles = await getMediaForArticles(articles);
@@ -70,6 +92,11 @@ export async function processChat(
     for (const media of articleMedia) {
       allMedia.push({ type: media.type, url: media.url, title: media.title });
     }
+  }
+
+  // Track knowledge gaps — fire-and-forget, don't block the response
+  if (articles.length === 0 && !imageUrl) {
+    storage.recordKnowledgeGap(userMessage, sessionId).catch(() => {});
   }
 
   const contextBlock = contextParts.length > 0
@@ -103,8 +130,9 @@ RULES:
   }
 
   const openai = getOpenAIClient();
+  const config = await getRagConfig();
 
-  const systemContent = SYSTEM_PROMPT + contextBlock + mediaBlock + imageInstruction;
+  const systemContent = config.systemPrompt + contextBlock + mediaBlock + imageInstruction;
 
   const messages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }> = [
     { role: "system", content: systemContent },
@@ -166,7 +194,7 @@ RULES:
   }
 
   const response = await openai.chat.completions.create({
-    model: "gpt-5.2",
+    model: config.model,
     messages,
     max_completion_tokens: 300,
     temperature: 0.7,

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,16 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [brandName, setBrandName] = useState("Admin Panel");
+
+  useEffect(() => {
+    fetch("/api/public/settings")
+      .then(r => r.json())
+      .then((s: Record<string, string>) => {
+        if (s["brand_name"]) setBrandName(s["brand_name"]);
+      })
+      .catch(() => {});
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,7 +46,7 @@ export default function LoginPage() {
             <Star className="w-6 h-6 text-primary-foreground" />
           </div>
           <CardTitle className="text-xl">Admin Login</CardTitle>
-          <p className="text-sm text-muted-foreground mt-1">Falcon Head Gear & Meenax T-Shirts</p>
+          <p className="text-sm text-muted-foreground mt-1">{brandName}</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">

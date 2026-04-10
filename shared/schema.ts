@@ -169,6 +169,30 @@ export const insertAnalyticsEventSchema = createInsertSchema(analyticsEvents).om
 export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
 export type InsertAnalyticsEvent = z.infer<typeof insertAnalyticsEventSchema>;
 
+export const knowledgeGaps = pgTable("knowledge_gaps", {
+  id: serial("id").primaryKey(),
+  question: text("question").notNull(),
+  sessionId: integer("session_id").references(() => chatSessions.id, { onDelete: "set null" }),
+  count: integer("count").default(1).notNull(),
+  resolved: boolean("resolved").default(false).notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  lastAskedAt: timestamp("last_asked_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_gap_resolved").on(table.resolved),
+  index("idx_gap_last_asked").on(table.lastAskedAt),
+]);
+
+export const insertKnowledgeGapSchema = createInsertSchema(knowledgeGaps).omit({
+  id: true,
+  count: true,
+  resolved: true,
+  createdAt: true,
+  lastAskedAt: true,
+});
+
+export type KnowledgeGap = typeof knowledgeGaps.$inferSelect;
+export type InsertKnowledgeGap = z.infer<typeof insertKnowledgeGapSchema>;
+
 export const conversations = pgTable("conversations", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),

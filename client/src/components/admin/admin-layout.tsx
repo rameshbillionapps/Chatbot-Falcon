@@ -1,11 +1,13 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, BookOpen, Image, MessageSquare, Settings, Code, ArrowLeft, LogOut, Plug } from "lucide-react";
+import { LayoutDashboard, BookOpen, Image, MessageSquare, Settings, Code, ArrowLeft, LogOut, Plug, AlertCircle } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
+import { useQuery } from "@tanstack/react-query";
 
 const navItems = [
   { href: "/admin", icon: LayoutDashboard, label: "Analytics" },
   { href: "/admin/knowledge", icon: BookOpen, label: "Knowledge Base" },
+  { href: "/admin/knowledge-gaps", icon: AlertCircle, label: "Knowledge Gaps" },
   { href: "/admin/media", icon: Image, label: "Media" },
   { href: "/admin/chat-history", icon: MessageSquare, label: "Chat History" },
   { href: "/admin/widgets", icon: Code, label: "Widgets" },
@@ -16,6 +18,16 @@ const navItems = [
 export function AdminLayout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const { user } = useAuth();
+
+  const { data: gapCount } = useQuery<number>({
+    queryKey: ["/api/admin/knowledge-gaps/count"],
+    queryFn: () =>
+      fetch("/api/admin/knowledge-gaps?resolved=false", { credentials: "include" })
+        .then(r => r.json())
+        .then((gaps: { id: number }[]) => gaps.length),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
 
   const handleLogout = async () => {
     try {
@@ -53,7 +65,12 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
                   data-testid={`nav-${item.label.toLowerCase().replace(/\s/g, '-')}`}
                 >
                   <item.icon className="w-4 h-4" />
-                  {item.label}
+                  <span className="flex-1">{item.label}</span>
+                  {item.href === "/admin/knowledge-gaps" && gapCount && gapCount > 0 ? (
+                    <span className="ml-auto text-[10px] font-semibold bg-amber-500 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center leading-none">
+                      {gapCount}
+                    </span>
+                  ) : null}
                 </div>
               </Link>
             );
