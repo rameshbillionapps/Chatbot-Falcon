@@ -10,6 +10,11 @@ interface ChatSession {
   visitorId: string;
 }
 
+interface BotSettings {
+  botName: string;
+  welcomeMessage: string;
+}
+
 export function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -18,6 +23,7 @@ export function ChatWidget() {
   const [session, setSession] = useState<ChatSession | null>(null);
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const [hasNewMessage, setHasNewMessage] = useState(false);
+  const [botSettings, setBotSettings] = useState<BotSettings>({ botName: "AI Assistant", welcomeMessage: "Hi! How can I help you today?" });
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -37,6 +43,12 @@ export function ChatWidget() {
       const data = await res.json();
       setSession(data.session);
       setSuggestedQuestions(data.suggestedQuestions || []);
+      if (data.botName || data.welcomeMessage) {
+        setBotSettings({
+          botName: data.botName || "AI Assistant",
+          welcomeMessage: data.welcomeMessage || "Hi! How can I help you today?",
+        });
+      }
     } catch (err) {
       console.error("Failed to start session:", err);
     }
@@ -140,7 +152,7 @@ export function ChatWidget() {
                   <MessageCircle className="w-5 h-5 text-primary-foreground" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-primary-foreground">Supplier Assistant</h3>
+                  <h3 className="text-sm font-semibold text-primary-foreground">{botSettings.botName}</h3>
                   <div className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
                     <span className="text-xs text-primary-foreground/80">Online</span>
@@ -171,9 +183,9 @@ export function ChatWidget() {
                   <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
                     <MessageCircle className="w-8 h-8 text-primary" />
                   </div>
-                  <h4 className="text-base font-semibold text-foreground mb-2">Welcome!</h4>
+                  <h4 className="text-base font-semibold text-foreground mb-2">{botSettings.botName}</h4>
                   <p className="text-sm text-muted-foreground mb-6 px-4">
-                    I can help you with product info, pricing, fabrics, printing methods, and more. You can also upload a photo to check if we manufacture that product.
+                    {botSettings.welcomeMessage}
                   </p>
                   {suggestedQuestions.length > 0 && (
                     <div className="space-y-2 px-2">

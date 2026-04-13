@@ -305,9 +305,14 @@ export async function registerRoutes(
         data: { domain: sourceDomain },
       });
 
+      const botName = await storage.getSetting("bot_name");
+      const welcomeMessage = await storage.getSetting("welcome_message");
+
       res.json({
         session,
         suggestedQuestions: await getSuggestedQuestions(),
+        botName: botName || "AI Assistant",
+        welcomeMessage: welcomeMessage || "Hi! How can I help you today?",
       });
     } catch (error: any) {
       console.error("Session creation error:", error);
