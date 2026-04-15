@@ -6,6 +6,7 @@ import { seedDatabase } from "./seed";
 import { requireAuth } from "./auth";
 import { generateEmbedding, setEmbeddingApiKey } from "./openai";
 import { sendWhatsAppTemplate, sendWhatsAppText, fetchMetaLead } from "./whatsapp";
+import { cache } from "./cache";
 import { insertKnowledgeArticleSchema, insertMediaAssetSchema, insertWidgetConfigSchema, chatMessages } from "@shared/schema";
 import { db } from "./db";
 import multer from "multer";
@@ -192,9 +193,7 @@ export async function registerRoutes(
       if (!text.trim()) continue;
 
       // Find or create a chat session keyed to this phone number
-      let session = (await storage.getChatSessions()).find(
-        s => s.visitorId === `wa:${phone}`
-      );
+      let session = await storage.getChatSessionByVisitorId(`wa:${phone}`);
       if (!session) {
         session = await storage.createChatSession({
           visitorId: `wa:${phone}`,
@@ -212,22 +211,22 @@ export async function registerRoutes(
         mediaAttachments: null,
       });
 
-      // Get history and process through RAG
-      const history = await storage.getChatMessages(session.id);
+      // Get history and process through RAG (only last 10 needed by processChat)
+      const history = await storage.getChatMessages(session.id, 10);
       const sessionHistory = history.map(m => ({ role: m.role, content: m.content }));
       const response = await processChat(text, sessionHistory, null, session.id);
 
-      // Save assistant message
-      await storage.createChatMessage({
-        sessionId: session.id,
-        role: "assistant",
-        content: response.content,
-        mediaAttachments: null,
-      });
-      await storage.updateSessionLastMessage(session.id);
-
-      // Send reply via WhatsApp
-      await sendWhatsAppText(phone, response.content);
+      // Save assistant message + send WhatsApp reply in parallel (independent writes)
+      await Promise.all([
+        storage.createChatMessage({
+          sessionId: session.id,
+          role: "assistant",
+          content: response.content,
+          mediaAttachments: null,
+        }),
+        storage.updateSessionLastMessage(session.id),
+        sendWhatsAppText(phone, response.content),
+      ]);
     }
   }
   // ─────────────────────────────────────────────────────────────────────────
@@ -502,6 +501,11 @@ export async function registerRoutes(
       await storage.setSetting(req.params.key, value);
       if (req.params.key === "openai_api_key") {
         setEmbeddingApiKey(value || null);
+      }
+      // Invalidate caches so updated settings take effect immediately
+      cache.delete("rag:config");
+      if (req.params.key === "meta_access_token" || req.params.key === "meta_phone_number_id") {
+        cache.delete("wa:credentials");
       }
       res.json({ success: true });
     } catch (error) {

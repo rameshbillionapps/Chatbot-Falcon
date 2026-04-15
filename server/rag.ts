@@ -32,7 +32,7 @@ MEDIA RULES:
 - Match media to topic. Do NOT mix unrelated media.
 - Maximum: 3 images + 1 PDF + 1 video per response. Include all that are relevant.`;
 
-async function getRagConfig() {
+async function _buildRagConfig() {
   const [systemPrompt, contactPhone, contactEmail, model] = await Promise.all([
     storage.getSetting("system_prompt"),
     storage.getSetting("contact_phone"),
@@ -61,6 +61,15 @@ async function getRagConfig() {
     fallbackMsg,
     model: model || "gpt-4o-mini",
   };
+}
+
+async function getRagConfig() {
+  const cacheKey = "rag:config";
+  const cached = cache.get<{ systemPrompt: string; fallbackMsg: string; model: string }>(cacheKey);
+  if (cached) return cached;
+  const config = await _buildRagConfig();
+  cache.set(cacheKey, config, 60_000);
+  return config;
 }
 
 export interface ChatResponse {
@@ -262,15 +271,26 @@ async function searchRelevantArticles(query: string): Promise<KnowledgeArticle[]
 
 async function getMediaForArticles(articles: KnowledgeArticle[]): Promise<Map<number, MediaAsset[]>> {
   const mediaMap = new Map<number, MediaAsset[]>();
+  const uncachedIds: number[] = [];
+
   for (const article of articles) {
-    const cacheKey = `media:${article.id}`;
-    let media = cache.get<MediaAsset[]>(cacheKey);
-    if (!media) {
-      media = await storage.getMediaByArticleId(article.id);
-      cache.set(cacheKey, media, 300000);
+    const cached = cache.get<MediaAsset[]>(`media:${article.id}`);
+    if (cached) {
+      mediaMap.set(article.id, cached);
+    } else {
+      uncachedIds.push(article.id);
     }
-    mediaMap.set(article.id, media);
   }
+
+  if (uncachedIds.length > 0) {
+    const batchResult = await storage.getMediaByArticleIds(uncachedIds);
+    for (const id of uncachedIds) {
+      const media = batchResult.get(id) || [];
+      cache.set(`media:${id}`, media, 300_000);
+      mediaMap.set(id, media);
+    }
+  }
+
   return mediaMap;
 }
 

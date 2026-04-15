@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, desc, sql, and, ilike, gte, lte, count } from "drizzle-orm";
+import { eq, desc, sql, and, ilike, gte, lte, count, inArray } from "drizzle-orm";
 import {
   users, knowledgeArticles, mediaAssets, chatSessions, chatMessages,
   adminSettings, widgetConfigs, analyticsEvents, knowledgeGaps,
@@ -35,14 +35,16 @@ export interface IStorage {
   deleteMediaAsset(id: number): Promise<void>;
   deleteAllMediaAssets(): Promise<number>;
   getMediaByArticleId(articleId: number): Promise<MediaAsset[]>;
+  getMediaByArticleIds(articleIds: number[]): Promise<Map<number, MediaAsset[]>>;
 
   createChatSession(session: InsertChatSession): Promise<ChatSession>;
   getChatSession(id: number): Promise<ChatSession | undefined>;
+  getChatSessionByVisitorId(visitorId: string): Promise<ChatSession | undefined>;
   getChatSessions(domain?: string, fromDate?: Date, toDate?: Date): Promise<ChatSession[]>;
   updateSessionLastMessage(id: number): Promise<void>;
 
   createChatMessage(message: InsertChatMessage): Promise<ChatMessage>;
-  getChatMessages(sessionId: number): Promise<ChatMessage[]>;
+  getChatMessages(sessionId: number, limit?: number): Promise<ChatMessage[]>;
   getMessageCount(sessionId: number): Promise<number>;
 
   getSetting(key: string): Promise<string | undefined>;
@@ -219,6 +221,19 @@ export class DatabaseStorage implements IStorage {
       .where(eq(mediaAssets.knowledgeArticleId, articleId));
   }
 
+  async getMediaByArticleIds(articleIds: number[]): Promise<Map<number, MediaAsset[]>> {
+    if (articleIds.length === 0) return new Map();
+    const rows = await db.select().from(mediaAssets)
+      .where(inArray(mediaAssets.knowledgeArticleId, articleIds));
+    const map = new Map<number, MediaAsset[]>();
+    for (const row of rows) {
+      const id = row.knowledgeArticleId!;
+      if (!map.has(id)) map.set(id, []);
+      map.get(id)!.push(row);
+    }
+    return map;
+  }
+
   async createChatSession(session: InsertChatSession): Promise<ChatSession> {
     const [created] = await db.insert(chatSessions).values(session).returning();
     return created;
@@ -226,6 +241,13 @@ export class DatabaseStorage implements IStorage {
 
   async getChatSession(id: number): Promise<ChatSession | undefined> {
     const [session] = await db.select().from(chatSessions).where(eq(chatSessions.id, id));
+    return session;
+  }
+
+  async getChatSessionByVisitorId(visitorId: string): Promise<ChatSession | undefined> {
+    const [session] = await db.select().from(chatSessions)
+      .where(eq(chatSessions.visitorId, visitorId))
+      .limit(1);
     return session;
   }
 
@@ -254,7 +276,14 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async getChatMessages(sessionId: number): Promise<ChatMessage[]> {
+  async getChatMessages(sessionId: number, limit?: number): Promise<ChatMessage[]> {
+    if (limit) {
+      const rows = await db.select().from(chatMessages)
+        .where(eq(chatMessages.sessionId, sessionId))
+        .orderBy(desc(chatMessages.timestamp))
+        .limit(limit);
+      return rows.reverse();
+    }
     return db.select().from(chatMessages)
       .where(eq(chatMessages.sessionId, sessionId))
       .orderBy(chatMessages.timestamp);
