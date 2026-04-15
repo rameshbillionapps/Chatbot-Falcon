@@ -112,6 +112,7 @@ export default function SettingsPage() {
     { key: "contact_phone", label: "Contact Phone / WhatsApp", description: "Phone or WhatsApp number shown in chat when users ask for contact details", placeholder: "+91 98765 43210" },
     { key: "contact_email", label: "Contact Email", description: "Email address shown in chat when users ask for contact details", placeholder: "support@yourcompany.com" },
     { key: "openai_model", label: "OpenAI Model", description: "The model used for generating responses", placeholder: "gpt-4o-mini" },
+    { key: "timezone", label: "Timezone", description: "Timezone used to tell the AI the current date and time (e.g. Asia/Kolkata, Asia/Dubai, Europe/London). Defaults to Asia/Kolkata if not set.", placeholder: "Asia/Kolkata" },
   ];
 
   return (

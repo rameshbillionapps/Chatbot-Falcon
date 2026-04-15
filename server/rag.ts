@@ -33,11 +33,12 @@ MEDIA RULES:
 - Maximum: 3 images + 1 PDF + 1 video per response. Include all that are relevant.`;
 
 async function _buildRagConfig() {
-  const [systemPrompt, contactPhone, contactEmail, model] = await Promise.all([
+  const [systemPrompt, contactPhone, contactEmail, model, timezone] = await Promise.all([
     storage.getSetting("system_prompt"),
     storage.getSetting("contact_phone"),
     storage.getSetting("contact_email"),
     storage.getSetting("openai_model"),
+    storage.getSetting("timezone"),
   ]);
 
   const contactLines = [
@@ -53,8 +54,22 @@ async function _buildRagConfig() {
     ? `I'm sorry, I don't have that information in our knowledge base right now. Please reach out to our team — ${contactLines.join(" / ")}.`
     : "I'm sorry, I don't have that information in our knowledge base right now. Please contact our team for help.";
 
+  const tz = timezone || "Asia/Kolkata";
+  const now = new Date();
+  const dateTimeStr = new Intl.DateTimeFormat("en-IN", {
+    timeZone: tz,
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(now);
+  const dateTimeSection = `\n\nCurrent date and time: ${dateTimeStr}`;
+
   const basePrompt = systemPrompt || "You are a helpful assistant.";
-  const fullSystemPrompt = basePrompt + STATIC_RULES + contactSection;
+  const fullSystemPrompt = basePrompt + STATIC_RULES + contactSection + dateTimeSection;
 
   return {
     systemPrompt: fullSystemPrompt,
