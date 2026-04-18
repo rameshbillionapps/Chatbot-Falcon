@@ -7,7 +7,7 @@ import { requireAuth } from "./auth";
 import { generateEmbedding, setEmbeddingApiKey } from "./openai";
 import { sendWhatsAppTemplate, sendWhatsAppText, fetchMetaLead } from "./whatsapp";
 import { cache } from "./cache";
-import { isBusinessCardIntent, hasCardIntent, setCardIntent, handleBusinessCardImage } from "./lead-capture";
+import { isBusinessCardIntent, hasCardIntent, setCardIntent, handleBusinessCardImage, extractCardFromBuffer, buildCardConfirmationReply } from "./lead-capture";
 import { insertKnowledgeArticleSchema, insertMediaAssetSchema, insertWidgetConfigSchema, chatMessages } from "@shared/schema";
 import { db } from "./db";
 import multer from "multer";
@@ -281,6 +281,35 @@ export async function registerRoutes(
         content: String(message),
         mediaAttachments: imageUrl ? [{ type: "image", url: imageUrl, title: "Uploaded image" }] : null,
       });
+
+      // Business card capture: image + card keyword → extract instead of RAG
+      if (req.file && isBusinessCardIntent(String(message))) {
+        const buffer = fs.readFileSync(req.file.path);
+        const extracted = await extractCardFromBuffer(buffer, req.file.mimetype || "image/jpeg");
+        const confirmationText = buildCardConfirmationReply(extracted);
+
+        await Promise.all([
+          storage.createLead({
+            whatsappPhone: `web:${sessionId}`,
+            name: extracted.name,
+            phone: extracted.phone,
+            email: extracted.email,
+            company: extracted.company,
+            designation: extracted.designation,
+            website: extracted.website,
+            rawJson: extracted as unknown as Record<string, string | null>,
+          }),
+          storage.createChatMessage({
+            sessionId,
+            role: "assistant",
+            content: confirmationText,
+            mediaAttachments: null,
+          }),
+          storage.updateSessionLastMessage(sessionId),
+        ]);
+
+        return res.json({ content: confirmationText, mediaAttachments: [], matchedCategories: [] });
+      }
 
       const history = await storage.getChatMessages(sessionId);
       const sessionHistory = history.map(m => ({ role: m.role, content: m.content }));

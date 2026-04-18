@@ -111,6 +111,24 @@ async function extractCardData(buffer: Buffer, mimeType: string): Promise<CardEx
 
 // ── 5. Public entry point ─────────────────────────────────────────────────────
 
+// Shared reply builder — used by both WhatsApp and web chat handlers
+export function buildCardConfirmationReply(extracted: CardExtraction): string {
+  const lines: string[] = ["Got it! I've saved the business card details:"];
+  if (extracted.name)        lines.push(`Name: ${extracted.name}`);
+  if (extracted.company)     lines.push(`Company: ${extracted.company}`);
+  if (extracted.designation) lines.push(`Title: ${extracted.designation}`);
+  if (extracted.phone)       lines.push(`Phone: ${extracted.phone}`);
+  if (extracted.email)       lines.push(`Email: ${extracted.email}`);
+  if (extracted.website)     lines.push(`Website: ${extracted.website}`);
+  lines.push("The lead has been captured in our system.");
+  return lines.join("\n");
+}
+
+// Export for the web chat handler (file already on disk — no WA media download needed)
+export async function extractCardFromBuffer(buffer: Buffer, mimeType: string): Promise<CardExtraction> {
+  return extractCardData(buffer, mimeType);
+}
+
 /**
  * Called by the WhatsApp inbound handler when an image message arrives
  * and the sender has declared business card intent (via caption or prior text).
@@ -133,15 +151,5 @@ export async function handleBusinessCardImage(phone: string, mediaId: string): P
   });
 
   clearCardIntent(phone);
-
-  const lines: string[] = ["Got it! I've saved the business card details:"];
-  if (extracted.name) lines.push(`Name: ${extracted.name}`);
-  if (extracted.company) lines.push(`Company: ${extracted.company}`);
-  if (extracted.designation) lines.push(`Title: ${extracted.designation}`);
-  if (extracted.phone) lines.push(`Phone: ${extracted.phone}`);
-  if (extracted.email) lines.push(`Email: ${extracted.email}`);
-  if (extracted.website) lines.push(`Website: ${extracted.website}`);
-  lines.push("The lead has been captured in our system.");
-
-  return lines.join("\n");
+  return buildCardConfirmationReply(extracted);
 }
