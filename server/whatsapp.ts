@@ -4,7 +4,7 @@ import { cache } from "./cache";
 const GRAPH_API_VERSION = "v19.0";
 const GRAPH_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
-async function getCredentials() {
+export async function getCredentials() {
   const cacheKey = "wa:credentials";
   const cached = cache.get<{ accessToken: string; phoneNumberId: string }>(cacheKey);
   if (cached) return cached;

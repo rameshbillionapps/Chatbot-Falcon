@@ -20,6 +20,7 @@ import SettingsPage from "@/pages/admin/settings";
 import WidgetsPage from "@/pages/admin/widgets";
 import ApiDocsPage from "@/pages/admin/api-docs";
 import KnowledgeGapsPage from "@/pages/admin/knowledge-gaps";
+import LeadsPage from "@/pages/admin/leads";
 
 function SiteGate({ children }: { children: React.ReactNode }) {
   const [unlocked, setUnlocked] = useState(() => sessionStorage.getItem("site_unlocked") === "true");
@@ -144,6 +145,7 @@ function Router() {
       <Route path="/admin/widgets">{() => <ProtectedRoute component={WidgetsPage} />}</Route>
       <Route path="/admin/api-docs">{() => <ProtectedRoute component={ApiDocsPage} />}</Route>
       <Route path="/admin/knowledge-gaps">{() => <ProtectedRoute component={KnowledgeGapsPage} />}</Route>
+      <Route path="/admin/leads">{() => <ProtectedRoute component={LeadsPage} />}</Route>
       <Route component={NotFound} />
     </Switch>
   );

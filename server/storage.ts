@@ -2,7 +2,7 @@ import { db } from "./db";
 import { eq, desc, sql, and, ilike, gte, lte, count, inArray } from "drizzle-orm";
 import {
   users, knowledgeArticles, mediaAssets, chatSessions, chatMessages,
-  adminSettings, widgetConfigs, analyticsEvents, knowledgeGaps,
+  adminSettings, widgetConfigs, analyticsEvents, knowledgeGaps, businessCardLeads,
   type User, type InsertUser,
   type KnowledgeArticle, type InsertKnowledgeArticle,
   type MediaAsset, type InsertMediaAsset,
@@ -12,6 +12,7 @@ import {
   type WidgetConfig, type InsertWidgetConfig,
   type AnalyticsEvent, type InsertAnalyticsEvent,
   type KnowledgeGap,
+  type BusinessCardLead, type InsertBusinessCardLead,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -61,6 +62,11 @@ export interface IStorage {
   getKnowledgeGaps(resolvedOnly?: boolean): Promise<KnowledgeGap[]>;
   resolveKnowledgeGap(id: number): Promise<void>;
   deleteKnowledgeGap(id: number): Promise<void>;
+
+  createLead(lead: InsertBusinessCardLead): Promise<BusinessCardLead>;
+  getLeads(limit?: number, offset?: number): Promise<BusinessCardLead[]>;
+  getLeadsCount(): Promise<number>;
+  deleteLead(id: number): Promise<void>;
 
   createAnalyticsEvent(event: InsertAnalyticsEvent): Promise<void>;
   getAnalyticsSummary(fromDate?: Date, toDate?: Date): Promise<{
@@ -463,6 +469,27 @@ export class DatabaseStorage implements IStorage {
 
   async deleteKnowledgeGap(id: number): Promise<void> {
     await db.delete(knowledgeGaps).where(eq(knowledgeGaps.id, id));
+  }
+
+  async createLead(lead: InsertBusinessCardLead): Promise<BusinessCardLead> {
+    const [created] = await db.insert(businessCardLeads).values(lead).returning();
+    return created;
+  }
+
+  async getLeads(limit = 50, offset = 0): Promise<BusinessCardLead[]> {
+    return db.select().from(businessCardLeads)
+      .orderBy(desc(businessCardLeads.capturedAt))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async getLeadsCount(): Promise<number> {
+    const [{ count: c }] = await db.select({ count: count() }).from(businessCardLeads);
+    return c;
+  }
+
+  async deleteLead(id: number): Promise<void> {
+    await db.delete(businessCardLeads).where(eq(businessCardLeads.id, id));
   }
 }
 

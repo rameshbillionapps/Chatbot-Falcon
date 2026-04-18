@@ -7,6 +7,7 @@ import { requireAuth } from "./auth";
 import { generateEmbedding, setEmbeddingApiKey } from "./openai";
 import { sendWhatsAppTemplate, sendWhatsAppText, fetchMetaLead } from "./whatsapp";
 import { cache } from "./cache";
+import { isBusinessCardIntent, hasCardIntent, setCardIntent, handleBusinessCardImage } from "./lead-capture";
 import { insertKnowledgeArticleSchema, insertMediaAssetSchema, insertWidgetConfigSchema, chatMessages } from "@shared/schema";
 import { db } from "./db";
 import multer from "multer";
@@ -186,13 +187,41 @@ export async function registerRoutes(
     if (!Array.isArray(messages) || messages.length === 0) return;
 
     for (const msg of messages) {
+      const phone: string = msg.from;
+
+      // ── Image message ────────────────────────────────────────────────────
+      if (msg.type === "image") {
+        const caption: string = msg.image?.caption || "";
+        const mediaId: string = msg.image?.id || "";
+        if (!mediaId) continue;
+
+        if (isBusinessCardIntent(caption) || hasCardIntent(phone)) {
+          try {
+            const reply = await handleBusinessCardImage(phone, mediaId);
+            await sendWhatsAppText(phone, reply);
+          } catch (err) {
+            console.error("Business card capture failed:", err);
+            await sendWhatsAppText(phone, "Sorry, I couldn't read that business card. Please try sending a clearer image.");
+          }
+        }
+        // Non-card images silently ignored
+        continue;
+      }
+
+      // ── Text message ─────────────────────────────────────────────────────
       if (msg.type !== "text") continue;
 
-      const phone: string = msg.from;
       const text: string = msg.text?.body || "";
       if (!text.trim()) continue;
 
-      // Find or create a chat session keyed to this phone number
+      // Two-step flow: user sends "business card" text → bot asks for image
+      if (isBusinessCardIntent(text)) {
+        setCardIntent(phone);
+        await sendWhatsAppText(phone, "Sure! Please send a photo of the business card and I'll capture the details.");
+        continue;
+      }
+
+      // Normal RAG flow
       let session = await storage.getChatSessionByVisitorId(`wa:${phone}`);
       if (!session) {
         session = await storage.createChatSession({
@@ -203,7 +232,6 @@ export async function registerRoutes(
         });
       }
 
-      // Save user message
       await storage.createChatMessage({
         sessionId: session.id,
         role: "user",
@@ -211,12 +239,10 @@ export async function registerRoutes(
         mediaAttachments: null,
       });
 
-      // Get history and process through RAG (only last 10 needed by processChat)
       const history = await storage.getChatMessages(session.id, 10);
       const sessionHistory = history.map(m => ({ role: m.role, content: m.content }));
       const response = await processChat(text, sessionHistory, null, session.id);
 
-      // Save assistant message + send WhatsApp reply in parallel (independent writes)
       await Promise.all([
         storage.createChatMessage({
           sessionId: session.id,
@@ -679,6 +705,32 @@ export async function registerRoutes(
       res.json(config);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch widget config" });
+    }
+  });
+
+  // ── Leads (Business Card Captures) ────────────────────────────────────────
+  app.get("/api/admin/leads", requireAuth, async (req, res) => {
+    try {
+      const limit = Math.min(Number(req.query.limit) || 50, 200);
+      const offset = Number(req.query.offset) || 0;
+      const [items, total] = await Promise.all([
+        storage.getLeads(limit, offset),
+        storage.getLeadsCount(),
+      ]);
+      res.json({ leads: items, total, limit, offset });
+    } catch {
+      res.status(500).json({ error: "Failed to fetch leads" });
+    }
+  });
+
+  app.delete("/api/admin/leads/:id", requireAuth, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      await storage.deleteLead(id);
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ error: "Failed to delete lead" });
     }
   });
 
