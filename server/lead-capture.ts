@@ -76,7 +76,7 @@ Extract all contact information visible on the card and return ONLY a valid JSON
 Rules:
 - Return ONLY the JSON object — no markdown, no explanation, no extra text.
 - If a field is not visible on the card, set it to null.
-- If multiple phone numbers exist, join them with ", ".
+- If multiple phone numbers exist, prefer the personal direct (D) or mobile (M) number. If no preference is clear, join all with ", ".
 - Preserve the original text exactly as printed on the card.`;
 
 async function extractCardData(buffer: Buffer, mimeType: string): Promise<CardExtraction> {
