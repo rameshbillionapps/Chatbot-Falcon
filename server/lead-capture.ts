@@ -41,23 +41,32 @@ export function clearCardIntent(phone: string): void {
 
 async function downloadWhatsAppImage(mediaId: string): Promise<{ buffer: Buffer; mimeType: string }> {
   const { accessToken } = await getCredentials();
+  console.log(`[card] Resolving media URL for id=${mediaId}`);
 
   // Step 1: resolve media URL from Meta
   const metaRes = await fetch(
     `https://graph.facebook.com/v19.0/${mediaId}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
-  if (!metaRes.ok) throw new Error(`Media lookup failed: ${await metaRes.text()}`);
-  const { url, mime_type } = await metaRes.json() as { url: string; mime_type: string };
+  if (!metaRes.ok) {
+    const errText = await metaRes.text();
+    console.error(`[card] Media lookup failed (${metaRes.status}):`, errText);
+    throw new Error(`Media lookup failed: ${errText}`);
+  }
+  const meta = await metaRes.json() as { url: string; mime_type: string };
+  console.log(`[card] Got media URL, mime=${meta.mime_type}`);
 
   // Step 2: download binary
-  const imgRes = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-  if (!imgRes.ok) throw new Error(`Media download failed: ${await imgRes.text()}`);
+  const imgRes = await fetch(meta.url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!imgRes.ok) {
+    const errText = await imgRes.text();
+    console.error(`[card] Media download failed (${imgRes.status}):`, errText);
+    throw new Error(`Media download failed: ${errText}`);
+  }
 
-  return {
-    buffer: Buffer.from(await imgRes.arrayBuffer()),
-    mimeType: mime_type || "image/jpeg",
-  };
+  const buffer = Buffer.from(await imgRes.arrayBuffer());
+  console.log(`[card] Image downloaded, size=${buffer.length} bytes`);
+  return { buffer, mimeType: meta.mime_type || "image/jpeg" };
 }
 
 // ── 4. GPT-4o vision extraction ───────────────────────────────────────────────
@@ -136,8 +145,11 @@ export async function extractCardFromBuffer(buffer: Buffer, mimeType: string): P
  * returns the confirmation message to send back to the user.
  */
 export async function handleBusinessCardImage(phone: string, mediaId: string): Promise<string> {
+  console.log(`[card] handleBusinessCardImage phone=${phone} mediaId=${mediaId}`);
   const { buffer, mimeType } = await downloadWhatsAppImage(mediaId);
+  console.log(`[card] Sending to GPT-4o for extraction...`);
   const extracted = await extractCardData(buffer, mimeType);
+  console.log(`[card] Extraction result:`, JSON.stringify(extracted));
 
   await storage.createLead({
     whatsappPhone: phone,

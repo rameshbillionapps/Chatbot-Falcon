@@ -193,16 +193,21 @@ export async function registerRoutes(
       if (msg.type === "image") {
         const caption: string = msg.image?.caption || "";
         const mediaId: string = msg.image?.id || "";
-        if (!mediaId) continue;
+        console.log(`[card] Image msg from ${phone} caption="${caption}" mediaId=${mediaId}`);
+        if (!mediaId) { console.warn("[card] No mediaId, skipping"); continue; }
 
         if (isBusinessCardIntent(caption) || hasCardIntent(phone)) {
+          console.log(`[card] Card intent detected, processing...`);
           try {
             const reply = await handleBusinessCardImage(phone, mediaId);
             await sendWhatsAppText(phone, reply);
+            console.log(`[card] Lead captured and reply sent to ${phone}`);
           } catch (err) {
-            console.error("Business card capture failed:", err);
+            console.error("[card] Business card capture failed:", err);
             await sendWhatsAppText(phone, "Sorry, I couldn't read that business card. Please try sending a clearer image.");
           }
+        } else {
+          console.log(`[card] No card intent (caption="${caption}", hasIntent=${hasCardIntent(phone)}), ignoring image`);
         }
         // Non-card images silently ignored
         continue;
