@@ -5,9 +5,8 @@ import { processChat, getSuggestedQuestions } from "./rag";
 import { seedDatabase } from "./seed";
 import { requireAuth } from "./auth";
 import { generateEmbedding, setEmbeddingApiKey } from "./openai";
-import { sendWhatsAppTemplate, sendWhatsAppText, fetchMetaLead } from "./whatsapp";
 import { cache } from "./cache";
-import { isBusinessCardIntent, hasCardIntent, setCardIntent, handleBusinessCardImage, extractCardFromBuffer, buildCardConfirmationReply } from "./lead-capture";
+import { isBusinessCardIntent, extractCardFromBuffer, buildCardConfirmationReply } from "./lead-capture";
 import { insertKnowledgeArticleSchema, insertMediaAssetSchema, insertWidgetConfigSchema, chatMessages } from "@shared/schema";
 import { db } from "./db";
 import multer from "multer";
@@ -107,161 +106,6 @@ export async function registerRoutes(
   });
   // ─────────────────────────────────────────────────────────────────────────
 
-  // ── Meta Webhooks ─────────────────────────────────────────────────────────
-
-  // Webhook verification handshake (Meta calls this when you first register)
-  app.get("/api/webhooks/meta", async (req, res) => {
-    try {
-      const mode = req.query["hub.mode"];
-      const token = req.query["hub.verify_token"];
-      const challenge = req.query["hub.challenge"];
-      const storedToken = await storage.getSetting("meta_verify_token");
-      if (mode === "subscribe" && token === storedToken) {
-        return res.status(200).send(challenge);
-      }
-      res.sendStatus(403);
-    } catch {
-      res.sendStatus(500);
-    }
-  });
-
-  // Receive lead + message events from Meta
-  app.post("/api/webhooks/meta", async (req, res) => {
-    // Always ack immediately — Meta retries if you don't respond within 20s
-    res.sendStatus(200);
-
-    try {
-      const body = req.body as Record<string, any>;
-
-      if (body.object === "page") {
-        // Lead Ad form submission
-        for (const entry of body.entry || []) {
-          for (const change of entry.changes || []) {
-            if (change.field === "leadgen") {
-              handleMetaLead(change.value).catch(err =>
-                console.error("handleMetaLead error:", err)
-              );
-            }
-          }
-        }
-      } else if (body.object === "whatsapp_business_account") {
-        // Inbound WhatsApp reply
-        for (const entry of body.entry || []) {
-          for (const change of entry.changes || []) {
-            if (change.field === "messages") {
-              handleWhatsAppInbound(change.value).catch(err =>
-                console.error("handleWhatsAppInbound error:", err)
-              );
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.error("Meta webhook processing error:", err);
-    }
-  });
-
-  async function handleMetaLead(value: any) {
-    const accessToken = await storage.getSetting("meta_access_token");
-    if (!accessToken) {
-      console.warn("meta_access_token not set — cannot process Meta lead");
-      return;
-    }
-
-    const leadgenId: string = value.leadgen_id;
-    if (!leadgenId) return;
-
-    // Fetch lead details from Graph API and send WhatsApp template
-    const leadData = await fetchMetaLead(leadgenId, accessToken);
-    if (leadData.phone) {
-      try {
-        await sendWhatsAppTemplate(leadData.phone, leadData.name || "there");
-      } catch (err) {
-        console.error("WhatsApp template send failed for lead:", err);
-      }
-    }
-  }
-
-  async function handleWhatsAppInbound(value: any) {
-    const messages = value.messages;
-    if (!Array.isArray(messages) || messages.length === 0) return;
-
-    for (const msg of messages) {
-      const phone: string = msg.from;
-
-      // ── Image message ────────────────────────────────────────────────────
-      if (msg.type === "image") {
-        const caption: string = msg.image?.caption || "";
-        const mediaId: string = msg.image?.id || "";
-        console.log(`[card] Image msg from ${phone} caption="${caption}" mediaId=${mediaId}`);
-        if (!mediaId) { console.warn("[card] No mediaId, skipping"); continue; }
-
-        if (isBusinessCardIntent(caption) || hasCardIntent(phone)) {
-          console.log(`[card] Card intent detected, processing...`);
-          try {
-            const reply = await handleBusinessCardImage(phone, mediaId);
-            await sendWhatsAppText(phone, reply);
-            console.log(`[card] Lead captured and reply sent to ${phone}`);
-          } catch (err) {
-            console.error("[card] Business card capture failed:", err);
-            await sendWhatsAppText(phone, "Sorry, I couldn't read that business card. Please try sending a clearer image.");
-          }
-        } else {
-          console.log(`[card] No card intent (caption="${caption}", hasIntent=${hasCardIntent(phone)}), ignoring image`);
-        }
-        // Non-card images silently ignored
-        continue;
-      }
-
-      // ── Text message ─────────────────────────────────────────────────────
-      if (msg.type !== "text") continue;
-
-      const text: string = msg.text?.body || "";
-      if (!text.trim()) continue;
-
-      // Two-step flow: user sends "business card" text → bot asks for image
-      if (isBusinessCardIntent(text)) {
-        setCardIntent(phone);
-        await sendWhatsAppText(phone, "Sure! Please send a photo of the business card and I'll capture the details.");
-        continue;
-      }
-
-      // Normal RAG flow
-      let session = await storage.getChatSessionByVisitorId(`wa:${phone}`);
-      if (!session) {
-        session = await storage.createChatSession({
-          visitorId: `wa:${phone}`,
-          visitorName: null,
-          visitorEmail: null,
-          sourceDomain: "whatsapp",
-        });
-      }
-
-      await storage.createChatMessage({
-        sessionId: session.id,
-        role: "user",
-        content: text,
-        mediaAttachments: null,
-      });
-
-      const history = await storage.getChatMessages(session.id, 10);
-      const sessionHistory = history.map(m => ({ role: m.role, content: m.content }));
-      const response = await processChat(text, sessionHistory, null, session.id);
-
-      await Promise.all([
-        storage.createChatMessage({
-          sessionId: session.id,
-          role: "assistant",
-          content: response.content,
-          mediaAttachments: null,
-        }),
-        storage.updateSessionLastMessage(session.id),
-        sendWhatsAppText(phone, response.content),
-      ]);
-    }
-  }
-  // ─────────────────────────────────────────────────────────────────────────
-
   app.post("/api/chat", upload.single("image"), async (req, res) => {
     try {
       const { message } = req.body;
@@ -294,16 +138,6 @@ export async function registerRoutes(
         const confirmationText = buildCardConfirmationReply(extracted);
 
         await Promise.all([
-          storage.createLead({
-            whatsappPhone: `web:${sessionId}`,
-            name: extracted.name,
-            phone: extracted.phone,
-            email: extracted.email,
-            company: extracted.company,
-            designation: extracted.designation,
-            website: extracted.website,
-            rawJson: extracted as unknown as Record<string, string | null>,
-          }),
           storage.createChatMessage({
             sessionId,
             role: "assistant",
@@ -313,7 +147,7 @@ export async function registerRoutes(
           storage.updateSessionLastMessage(sessionId),
         ]);
 
-        return res.json({ content: confirmationText, mediaAttachments: [], matchedCategories: [] });
+        return res.json({ content: confirmationText, mediaAttachments: [], matchedCategories: [], cardExtraction: extracted });
       }
 
       const history = await storage.getChatMessages(sessionId);
@@ -564,9 +398,6 @@ export async function registerRoutes(
       }
       // Invalidate caches so updated settings take effect immediately
       cache.delete("rag:config");
-      if (req.params.key === "meta_access_token" || req.params.key === "meta_phone_number_id") {
-        cache.delete("wa:credentials");
-      }
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to update setting" });
@@ -739,32 +570,6 @@ export async function registerRoutes(
       res.json(config);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch widget config" });
-    }
-  });
-
-  // ── Leads (Business Card Captures) ────────────────────────────────────────
-  app.get("/api/admin/leads", requireAuth, async (req, res) => {
-    try {
-      const limit = Math.min(Number(req.query.limit) || 50, 200);
-      const offset = Number(req.query.offset) || 0;
-      const [items, total] = await Promise.all([
-        storage.getLeads(limit, offset),
-        storage.getLeadsCount(),
-      ]);
-      res.json({ leads: items, total, limit, offset });
-    } catch {
-      res.status(500).json({ error: "Failed to fetch leads" });
-    }
-  });
-
-  app.delete("/api/admin/leads/:id", requireAuth, async (req, res) => {
-    try {
-      const id = Number(req.params.id);
-      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
-      await storage.deleteLead(id);
-      res.json({ success: true });
-    } catch {
-      res.status(500).json({ error: "Failed to delete lead" });
     }
   });
 

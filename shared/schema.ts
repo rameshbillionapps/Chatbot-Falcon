@@ -207,22 +207,3 @@ export const messages = pgTable("messages", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
-export const businessCardLeads = pgTable("business_card_leads", {
-  id: serial("id").primaryKey(),
-  whatsappPhone: text("whatsapp_phone").notNull(),
-  name: text("name"),
-  phone: text("phone"),
-  email: text("email"),
-  company: text("company"),
-  designation: text("designation"),
-  website: text("website"),
-  rawJson: jsonb("raw_json").$type<Record<string, string | null>>(),
-  capturedAt: timestamp("captured_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-}, (table) => [
-  index("idx_bc_leads_phone").on(table.whatsappPhone),
-  index("idx_bc_leads_captured").on(table.capturedAt),
-]);
-
-export const insertBusinessCardLeadSchema = createInsertSchema(businessCardLeads).omit({ id: true, capturedAt: true });
-export type BusinessCardLead = typeof businessCardLeads.$inferSelect;
-export type InsertBusinessCardLead = z.infer<typeof insertBusinessCardLeadSchema>;
