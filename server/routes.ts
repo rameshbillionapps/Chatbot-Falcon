@@ -6,7 +6,7 @@ import { seedDatabase } from "./seed";
 import { requireAuth } from "./auth";
 import { generateEmbedding, setEmbeddingApiKey } from "./openai";
 import { cache } from "./cache";
-import { isBusinessCardIntent, extractCardFromBuffer, buildCardConfirmationReply } from "./lead-capture";
+import { extractCardFromBuffer, buildCardConfirmationReply } from "./lead-capture";
 import { insertKnowledgeArticleSchema, insertMediaAssetSchema, insertWidgetConfigSchema, chatMessages } from "@shared/schema";
 import { db } from "./db";
 import multer from "multer";
@@ -131,23 +131,27 @@ export async function registerRoutes(
         mediaAttachments: imageUrl ? [{ type: "image", url: imageUrl, title: "Uploaded image" }] : null,
       });
 
-      // Business card capture: image + card keyword → extract instead of RAG
-      if (req.file && isBusinessCardIntent(String(message))) {
+      // Auto-detect business card: run extraction on every image upload
+      if (req.file) {
         const buffer = fs.readFileSync(req.file.path);
         const extracted = await extractCardFromBuffer(buffer, req.file.mimetype || "image/jpeg");
-        const confirmationText = buildCardConfirmationReply(extracted);
 
-        await Promise.all([
-          storage.createChatMessage({
-            sessionId,
-            role: "assistant",
-            content: confirmationText,
-            mediaAttachments: null,
-          }),
-          storage.updateSessionLastMessage(sessionId),
-        ]);
+        if (extracted.is_card) {
+          const confirmationText = buildCardConfirmationReply(extracted);
 
-        return res.json({ content: confirmationText, mediaAttachments: [], matchedCategories: [], cardExtraction: extracted });
+          await Promise.all([
+            storage.createChatMessage({
+              sessionId,
+              role: "assistant",
+              content: confirmationText,
+              mediaAttachments: null,
+            }),
+            storage.updateSessionLastMessage(sessionId),
+          ]);
+
+          return res.json({ content: confirmationText, mediaAttachments: [], matchedCategories: [], cardExtraction: extracted });
+        }
+        // Not a business card — fall through to RAG with imageUrl
       }
 
       const history = await storage.getChatMessages(sessionId);

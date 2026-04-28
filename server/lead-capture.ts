@@ -3,6 +3,7 @@ import { getOpenAIClient } from "./openai";
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface CardExtraction {
+  is_card: boolean;
   name: string | null;
   phone: string | null;
   email: string | null;
@@ -11,21 +12,13 @@ export interface CardExtraction {
   website: string | null;
 }
 
-// ── 1. Intent detection ──────────────────────────────────────────────────────
-
-const CARD_KEYWORDS = ["visiting card", "business card", "bizcard", "namecard", "name card"];
-
-export function isBusinessCardIntent(text: string): boolean {
-  const lower = text.toLowerCase().trim();
-  return CARD_KEYWORDS.some(kw => lower.includes(kw));
-}
-
-// ── 2. GPT-4o vision extraction ───────────────────────────────────────────────
+// ── GPT-4o vision extraction ──────────────────────────────────────────────────
 
 const EXTRACTION_PROMPT = `You are a business card data extraction assistant.
-The user has sent an image of a business/visiting card.
-Extract all contact information visible on the card and return ONLY a valid JSON object with exactly these keys:
+Examine the image and determine if it is a business/visiting card.
+Return ONLY a valid JSON object with exactly these keys:
 {
+  "is_card": true or false,
   "name": "full name of the person or null",
   "phone": "phone number(s) as a string or null",
   "email": "email address or null",
@@ -34,6 +27,9 @@ Extract all contact information visible on the card and return ONLY a valid JSON
   "website": "website URL or null"
 }
 Rules:
+- Set is_card to true only if the image is clearly a business/visiting card.
+- Set is_card to false for any other image type (product photo, document, selfie, logo, etc.).
+- If is_card is false, set all other fields to null.
 - Return ONLY the JSON object — no markdown, no explanation, no extra text.
 - If a field is not visible on the card, set it to null.
 - If multiple phone numbers exist, prefer the personal direct (D) or mobile (M) number. If no preference is clear, join all with ", ".
@@ -68,7 +64,7 @@ async function extractCardData(buffer: Buffer, mimeType: string): Promise<CardEx
   }
 }
 
-// ── 3. Public helpers (used by /api/chat handler) ─────────────────────────────
+// ── Public helpers (used by /api/chat handler) ─────────────────────────────────
 
 export async function extractCardFromBuffer(buffer: Buffer, mimeType: string): Promise<CardExtraction> {
   return extractCardData(buffer, mimeType);
