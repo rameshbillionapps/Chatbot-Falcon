@@ -7,6 +7,7 @@ import { requireAuth } from "./auth";
 import { generateEmbedding, setEmbeddingApiKey } from "./openai";
 import { cache } from "./cache";
 import { extractCardFromBuffer, buildCardConfirmationReply } from "./lead-capture";
+import { shouldTriggerLeadCollection, startLeadCollection, processLeadStep } from "./lead-collect";
 import { insertKnowledgeArticleSchema, insertMediaAssetSchema, insertWidgetConfigSchema, chatMessages } from "@shared/schema";
 import { db } from "./db";
 import multer from "multer";
@@ -156,6 +157,40 @@ export async function registerRoutes(
 
       const history = await storage.getChatMessages(sessionId);
       const sessionHistory = history.map(m => ({ role: m.role, content: m.content }));
+
+      // ── Sales agent: proactive lead collection ─────────────────────────────
+      const stepResult = processLeadStep(sessionId, String(message));
+      if (stepResult !== null) {
+        await Promise.all([
+          storage.createChatMessage({ sessionId, role: "assistant", content: stepResult.response, mediaAttachments: null }),
+          storage.updateSessionLastMessage(sessionId),
+        ]);
+        if (stepResult.lead) {
+          storage.getSetting("lead_capture_webhook_url").then(url => {
+            if (url) fetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...stepResult.lead, sessionId, capturedAt: new Date().toISOString() }),
+            }).catch(err => console.error("[lead-collect] Webhook error:", err));
+          }).catch(() => {});
+        }
+        return res.json({
+          content: stepResult.response,
+          mediaAttachments: [],
+          matchedCategories: [],
+          ...(stepResult.lead ? { leadCapture: stepResult.lead } : {}),
+        });
+      }
+
+      if (shouldTriggerLeadCollection(String(message), history.length, sessionId)) {
+        const firstQuestion = startLeadCollection(sessionId);
+        await Promise.all([
+          storage.createChatMessage({ sessionId, role: "assistant", content: firstQuestion, mediaAttachments: null }),
+          storage.updateSessionLastMessage(sessionId),
+        ]);
+        return res.json({ content: firstQuestion, mediaAttachments: [], matchedCategories: [] });
+      }
+      // ──────────────────────────────────────────────────────────────────────
 
       const response = await processChat(String(message), sessionHistory, imageUrl, sessionId);
 

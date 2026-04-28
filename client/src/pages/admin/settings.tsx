@@ -113,6 +113,7 @@ export default function SettingsPage() {
     { key: "contact_email", label: "Contact Email", description: "Email address shown in chat when users ask for contact details", placeholder: "support@yourcompany.com" },
     { key: "openai_model", label: "OpenAI Model", description: "The model used for generating responses", placeholder: "gpt-4o-mini" },
     { key: "timezone", label: "Timezone", description: "Timezone used to tell the AI the current date and time (e.g. Asia/Kolkata, Asia/Dubai, Europe/London). Defaults to Asia/Kolkata if not set.", placeholder: "Asia/Kolkata" },
+    { key: "lead_capture_webhook_url", label: "Lead Capture Webhook URL", description: "POST endpoint that receives chat leads (name, email, phone, source: chat). Leave empty to disable.", placeholder: "https://walead.billionapps.ai/api/leads/webhook" },
   ];
 
   return (
