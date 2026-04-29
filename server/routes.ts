@@ -150,6 +150,20 @@ export async function registerRoutes(
             storage.updateSessionLastMessage(sessionId),
           ]);
 
+          // Fire webhook to Lead Mgmt app (fire-and-forget)
+          storage.getSetting("lead_capture_webhook_url").then(url => {
+            if (url) fetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                ...extracted,
+                source: "webchat",
+                sessionId,
+                capturedAt: new Date().toISOString(),
+              }),
+            }).catch(err => console.error("[card] Webhook error:", err));
+          }).catch(() => {});
+
           return res.json({ content: confirmationText, mediaAttachments: [], matchedCategories: [], cardExtraction: extracted });
         }
         // Not a business card — fall through to RAG with imageUrl
