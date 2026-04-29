@@ -5,11 +5,12 @@ import { getOpenAIClient } from "./openai";
 export interface CardExtraction {
   is_card: boolean;
   name: string | null;
-  phone: string | null;
+  phone: string | null;       // single primary number only
   email: string | null;
   company: string | null;
   designation: string | null;
   website: string | null;
+  notes: string | null;       // extra phones, address, fax, or other printed info
 }
 
 // ── GPT-4o vision extraction ──────────────────────────────────────────────────
@@ -20,11 +21,12 @@ Return ONLY a valid JSON object with exactly these keys:
 {
   "is_card": true or false,
   "name": "full name of the person or null",
-  "phone": "phone number(s) as a string or null",
+  "phone": "single primary phone number or null",
   "email": "email address or null",
   "company": "company or organization name or null",
   "designation": "job title or designation or null",
-  "website": "website URL or null"
+  "website": "website URL or null",
+  "notes": "any additional info such as extra phone numbers, address, fax, or null"
 }
 Rules:
 - Set is_card to true only if the image is clearly a business/visiting card.
@@ -32,7 +34,8 @@ Rules:
 - If is_card is false, set all other fields to null.
 - Return ONLY the JSON object — no markdown, no explanation, no extra text.
 - If a field is not visible on the card, set it to null.
-- If multiple phone numbers exist, prefer the personal direct (D) or mobile (M) number. If no preference is clear, join all with ", ".
+- For phone: return exactly ONE number. Prefer Direct (D) first, then Mobile (M), then any other. Do NOT join multiple numbers in this field.
+- Put all remaining phone numbers (mobile, fax, toll-free, etc.) and any physical address into the notes field as a single string.
 - Preserve the original text exactly as printed on the card.`;
 
 async function extractCardData(buffer: Buffer, mimeType: string): Promise<CardExtraction> {
@@ -41,7 +44,7 @@ async function extractCardData(buffer: Buffer, mimeType: string): Promise<CardEx
 
   const res = await openai.chat.completions.create({
     model: "gpt-4o",
-    max_tokens: 400,
+    max_tokens: 500,
     stream: false,
     messages: [
       {
@@ -78,5 +81,6 @@ export function buildCardConfirmationReply(extracted: CardExtraction): string {
   if (extracted.phone)       lines.push(`Phone: ${extracted.phone}`);
   if (extracted.email)       lines.push(`Email: ${extracted.email}`);
   if (extracted.website)     lines.push(`Website: ${extracted.website}`);
+  if (extracted.notes)       lines.push(`Notes: ${extracted.notes}`);
   return lines.join("\n");
 }

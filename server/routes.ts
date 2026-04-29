@@ -166,6 +166,7 @@ export async function registerRoutes(
                 ...extracted,
                 source: "webchat",
                 sessionId,
+                imageUrl: imageUrl ?? null,
                 capturedAt: new Date().toISOString(),
               }),
             })
