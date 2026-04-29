@@ -151,12 +151,17 @@ export async function registerRoutes(
           ]);
 
           // Fire webhook to Lead Mgmt app (fire-and-forget)
-          storage.getSetting("lead_capture_webhook_url").then(url => {
+          Promise.all([
+            storage.getSetting("lead_capture_webhook_url"),
+            storage.getSetting("lead_webhook_secret"),
+          ]).then(([url, secret]) => {
             if (!url) { console.warn("[card] lead_capture_webhook_url not set — skipping webhook"); return; }
             console.log(`[card] Firing webhook to ${url}`);
+            const headers: Record<string, string> = { "Content-Type": "application/json" };
+            if (secret) headers["X-Webhook-Secret"] = secret;
             fetch(url, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers,
               body: JSON.stringify({
                 ...extracted,
                 source: "webchat",
@@ -184,10 +189,16 @@ export async function registerRoutes(
           storage.updateSessionLastMessage(sessionId),
         ]);
         if (stepResult.lead) {
-          storage.getSetting("lead_capture_webhook_url").then(url => {
-            if (url) fetch(url, {
+          Promise.all([
+            storage.getSetting("lead_capture_webhook_url"),
+            storage.getSetting("lead_webhook_secret"),
+          ]).then(([url, secret]) => {
+            if (!url) return;
+            const headers: Record<string, string> = { "Content-Type": "application/json" };
+            if (secret) headers["X-Webhook-Secret"] = secret;
+            fetch(url, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers,
               body: JSON.stringify({ ...stepResult.lead, sessionId, capturedAt: new Date().toISOString() }),
             }).catch(err => console.error("[lead-collect] Webhook error:", err));
           }).catch(() => {});
