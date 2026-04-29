@@ -8,6 +8,7 @@ import { generateEmbedding, setEmbeddingApiKey } from "./openai";
 import { cache } from "./cache";
 import { extractCardFromBuffer, buildCardConfirmationReply } from "./lead-capture";
 import { shouldTriggerLeadCollection, startLeadCollection, processLeadStep } from "./lead-collect";
+import { isS3Configured, uploadCardImageToS3 } from "./s3";
 import { insertKnowledgeArticleSchema, insertMediaAssetSchema, insertWidgetConfigSchema, chatMessages } from "@shared/schema";
 import { db } from "./db";
 import multer from "multer";
@@ -140,6 +141,17 @@ export async function registerRoutes(
         if (extracted.is_card) {
           const confirmationText = buildCardConfirmationReply(extracted);
 
+          // Upload image to S3 for permanent storage
+          let cardImageUrl: string | null = imageUrl;
+          if (req.file && isS3Configured()) {
+            try {
+              cardImageUrl = await uploadCardImageToS3(req.file.path, req.file.mimetype || "image/jpeg");
+              console.log(`[card] Uploaded to S3: ${cardImageUrl}`);
+            } catch (err) {
+              console.error("[card] S3 upload failed, falling back to local URL:", err);
+            }
+          }
+
           await Promise.all([
             storage.createChatMessage({
               sessionId,
@@ -166,7 +178,7 @@ export async function registerRoutes(
                 ...extracted,
                 source: "webchat",
                 sessionId,
-                imageUrl: imageUrl ?? null,
+                imageUrl: cardImageUrl,
                 capturedAt: new Date().toISOString(),
               }),
             })
