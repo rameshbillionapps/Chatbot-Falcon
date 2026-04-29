@@ -152,7 +152,9 @@ export async function registerRoutes(
 
           // Fire webhook to Lead Mgmt app (fire-and-forget)
           storage.getSetting("lead_capture_webhook_url").then(url => {
-            if (url) fetch(url, {
+            if (!url) { console.warn("[card] lead_capture_webhook_url not set — skipping webhook"); return; }
+            console.log(`[card] Firing webhook to ${url}`);
+            fetch(url, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -161,7 +163,9 @@ export async function registerRoutes(
                 sessionId,
                 capturedAt: new Date().toISOString(),
               }),
-            }).catch(err => console.error("[card] Webhook error:", err));
+            })
+              .then(r => console.log(`[card] Webhook response: ${r.status}`))
+              .catch(err => console.error("[card] Webhook error:", err));
           }).catch(() => {});
 
           return res.json({ content: confirmationText, mediaAttachments: [], matchedCategories: [], cardExtraction: extracted });
