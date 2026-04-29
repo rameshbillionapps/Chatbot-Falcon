@@ -2,8 +2,8 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import fs from "fs";
 import path from "path";
 
-const BUCKET = "lead-management-473873806984-ap-south-1-an";
-const REGION = "ap-south-1";
+const BUCKET = process.env.S3_BUCKET || "lead-management-473873806984-ap-south-1-an";
+const REGION = process.env.S3_REGION || "ap-south-1";
 
 let _client: S3Client | null = null;
 
