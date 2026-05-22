@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import cors from "cors";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -22,6 +23,13 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+// Allow cross-origin requests for public chat and widget endpoints
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Webhook-Secret"],
+}));
 
 setupAuth(app);
 
