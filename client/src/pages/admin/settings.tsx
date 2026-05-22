@@ -115,6 +115,8 @@ export default function SettingsPage() {
     { key: "timezone", label: "Timezone", description: "Timezone used to tell the AI the current date and time (e.g. Asia/Kolkata, Asia/Dubai, Europe/London). Defaults to Asia/Kolkata if not set.", placeholder: "Asia/Kolkata" },
     { key: "lead_capture_webhook_url", label: "Lead Capture Webhook URL", description: "POST endpoint that receives chat leads (name, email, phone, source: chat). Leave empty to disable.", placeholder: "https://walead.billionapps.ai/api/leads/webhook" },
     { key: "lead_webhook_secret", label: "Lead Webhook Secret", description: "Sent as X-Webhook-Secret header with every lead webhook call. Must match the secret configured in the Lead Management app.", placeholder: "your-secret-here" },
+    { key: "lead_api_url", label: "Lead API URL", description: "Direct REST endpoint to create leads (POST /api/leads). Used for both card captures and conversational leads.", placeholder: "https://walead.billionapps.ai/api/leads" },
+    { key: "lead_api_source", label: "Lead API Source Tag", description: "Value sent as the 'source' field when creating leads via the Lead API. Identifies which chatbot/site sent the lead.", placeholder: "billionapps-portfolio" },
   ];
 
   return (

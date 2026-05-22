@@ -31,6 +31,38 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 },
 });
 
+// ── Lead API helper ───────────────────────────────────────────────────────────
+
+async function postLeadToApi(payload: {
+  name?: string | null;
+  email?: string | null;
+  phoneNumber?: string | null;
+  company?: string | null;
+  designation?: string | null;
+  notes?: string | null;
+  tags?: string[];
+  source: string;
+}): Promise<void> {
+  const [apiUrl, secret] = await Promise.all([
+    storage.getSetting("lead_api_url"),
+    storage.getSetting("lead_webhook_secret"),
+  ]);
+  if (!apiUrl) return;
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (secret) headers["X-Webhook-Secret"] = secret;
+
+  fetch(apiUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ ...payload, status: "new", score: "cold" }),
+  })
+    .then(r => console.log(`[lead-api] POST ${apiUrl} → ${r.status}`))
+    .catch(err => console.error("[lead-api] Error:", err));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -186,6 +218,20 @@ export async function registerRoutes(
               .catch(err => console.error("[card] Webhook error:", err));
           }).catch(() => {});
 
+          // Direct Lead API (POST /api/leads)
+          storage.getSetting("lead_api_source").then(source => {
+            postLeadToApi({
+              name: extracted.name,
+              email: extracted.email,
+              phoneNumber: extracted.phone,
+              company: extracted.company,
+              designation: extracted.designation,
+              notes: extracted.notes,
+              source: source || "chatbot",
+              tags: ["chatbot", "visiting-card"],
+            });
+          }).catch(() => {});
+
           return res.json({ content: confirmationText, mediaAttachments: [], matchedCategories: [], cardExtraction: extracted });
         }
         // Not a business card — fall through to RAG with imageUrl
@@ -202,6 +248,7 @@ export async function registerRoutes(
           storage.updateSessionLastMessage(sessionId),
         ]);
         if (stepResult.lead) {
+          // Existing webhook (walead webhook endpoint)
           Promise.all([
             storage.getSetting("lead_capture_webhook_url"),
             storage.getSetting("lead_webhook_secret"),
@@ -214,6 +261,17 @@ export async function registerRoutes(
               headers,
               body: JSON.stringify({ ...stepResult.lead, sessionId, capturedAt: new Date().toISOString() }),
             }).catch(err => console.error("[lead-collect] Webhook error:", err));
+          }).catch(() => {});
+
+          // Direct Lead API (POST /api/leads)
+          storage.getSetting("lead_api_source").then(source => {
+            postLeadToApi({
+              name: stepResult.lead!.name,
+              email: stepResult.lead!.email,
+              phoneNumber: stepResult.lead!.phone,
+              source: source || "chatbot",
+              tags: ["chatbot"],
+            });
           }).catch(() => {});
         }
         return res.json({
