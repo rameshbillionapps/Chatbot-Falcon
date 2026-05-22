@@ -418,13 +418,45 @@ export async function registerRoutes(
       if ([".pdf"].includes(ext)) type = "pdf";
       else if ([".mp4", ".webm", ".mov"].includes(ext)) type = "video";
 
+      const title = req.body.title || req.file.originalname;
+
+      // Auto-extract PDF text and create a Knowledge Base article
+      let knowledgeArticleId: number | null = req.body.knowledgeArticleId ? parseInt(req.body.knowledgeArticleId) : null;
+      if (type === "pdf" && !knowledgeArticleId) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string }>;
+          const pdfBuffer = fs.readFileSync(req.file.path);
+          const pdfData = await pdfParse(pdfBuffer);
+          const extractedText = pdfData.text?.trim();
+
+          if (extractedText && extractedText.length > 50) {
+            const article = await storage.createKnowledgeArticle({
+              title,
+              content: extractedText,
+              category: "documents",
+              sourceUrl: fileUrl,
+              isActive: true,
+            });
+            knowledgeArticleId = article.id;
+            // Generate embedding asynchronously
+            generateEmbedding(`${article.title} ${article.category} ${extractedText}`)
+              .then(emb => storage.updateArticleEmbedding(article.id, emb))
+              .catch(err => console.error("PDF embedding failed:", err));
+            console.log(`[pdf] Extracted ${extractedText.length} chars from "${title}", created KB article #${article.id}`);
+          }
+        } catch (err) {
+          console.error("[pdf] Text extraction failed:", err);
+        }
+      }
+
       const asset = await storage.createMediaAsset({
-        title: req.body.title || req.file.originalname,
+        title,
         type,
         url: fileUrl,
         description: req.body.description || null,
         category: req.body.category || null,
-        knowledgeArticleId: req.body.knowledgeArticleId ? parseInt(req.body.knowledgeArticleId) : null,
+        knowledgeArticleId,
       });
       res.status(201).json(asset);
     } catch (error) {

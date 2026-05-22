@@ -247,8 +247,18 @@ RULES:
     ];
   }
 
+  // Append PDF document links for articles sourced from uploaded PDFs
+  const pdfLinks = articles
+    .filter(a => a.sourceUrl && a.sourceUrl.match(/\.pdf($|\?)/i))
+    .map(a => `📄 [${a.title}](${a.sourceUrl})`)
+    .filter((v, i, arr) => arr.indexOf(v) === i); // dedupe
+
+  const finalContent = pdfLinks.length > 0
+    ? cleanMediaReferences(content) + "\n\n**To know more, check the document" + (pdfLinks.length > 1 ? "s" : "") + ":**\n" + pdfLinks.join("\n")
+    : cleanMediaReferences(content);
+
   return {
-    content: cleanMediaReferences(content),
+    content: finalContent,
     mediaAttachments: finalMedia,
     matchedCategories,
   };
