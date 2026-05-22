@@ -224,14 +224,6 @@ export async function registerRoutes(
         });
       }
 
-      if (shouldTriggerLeadCollection(String(message), history.length, sessionId)) {
-        const firstQuestion = startLeadCollection(sessionId);
-        await Promise.all([
-          storage.createChatMessage({ sessionId, role: "assistant", content: firstQuestion, mediaAttachments: null }),
-          storage.updateSessionLastMessage(sessionId),
-        ]);
-        return res.json({ content: firstQuestion, mediaAttachments: [], matchedCategories: [] });
-      }
       // ──────────────────────────────────────────────────────────────────────
 
       const response = await processChat(String(message), sessionHistory, imageUrl, sessionId);
@@ -239,10 +231,17 @@ export async function registerRoutes(
       const mediaAttachments = Array.isArray(response.mediaAttachments) ? response.mediaAttachments : [];
       const matchedCategories = Array.isArray(response.matchedCategories) ? response.matchedCategories : [];
 
+      // Answer first, then append lead collection prompt if triggered
+      let finalContent = response.content || "I couldn't generate a response. Please try again.";
+      if (shouldTriggerLeadCollection(String(message), history.length, sessionId)) {
+        const firstQuestion = startLeadCollection(sessionId);
+        finalContent = finalContent + "\n\n" + firstQuestion;
+      }
+
       await storage.createChatMessage({
         sessionId,
         role: "assistant",
-        content: response.content || "I couldn't generate a response. Please try again.",
+        content: finalContent,
         mediaAttachments: mediaAttachments.length > 0 ? mediaAttachments : null,
       });
 
@@ -256,7 +255,7 @@ export async function registerRoutes(
         });
       }
 
-      res.json({ content: response.content, mediaAttachments, matchedCategories });
+      res.json({ content: finalContent, mediaAttachments, matchedCategories });
     } catch (error: any) {
       console.error("Chat error:", error);
       res.status(500).json({ error: "Failed to process message" });
