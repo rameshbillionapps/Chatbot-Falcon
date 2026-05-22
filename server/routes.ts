@@ -424,8 +424,9 @@ export async function registerRoutes(
       let knowledgeArticleId: number | null = req.body.knowledgeArticleId ? parseInt(req.body.knowledgeArticleId) : null;
       if (type === "pdf" && !knowledgeArticleId) {
         try {
+          // Use internal path to avoid pdf-parse test-file loading bug
           // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string }>;
+          const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (buf: Buffer) => Promise<{ text: string }>;
           const pdfBuffer = fs.readFileSync(req.file.path);
           const pdfData = await pdfParse(pdfBuffer);
           const extractedText = pdfData.text?.trim();
@@ -445,8 +446,8 @@ export async function registerRoutes(
               .catch(err => console.error("PDF embedding failed:", err));
             console.log(`[pdf] Extracted ${extractedText.length} chars from "${title}", created KB article #${article.id}`);
           }
-        } catch (err) {
-          console.error("[pdf] Text extraction failed:", err);
+        } catch (err: any) {
+          console.error("[pdf] Text extraction failed:", err?.message || err);
         }
       }
 
