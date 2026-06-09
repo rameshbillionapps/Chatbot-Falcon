@@ -9,7 +9,8 @@ import { cache } from "./cache";
 import { extractCardFromBuffer, buildCardConfirmationReply } from "./lead-capture";
 import { shouldTriggerLeadCollection, startLeadCollection, processLeadStep } from "./lead-collect";
 import { isS3Configured, uploadCardImageToS3 } from "./s3";
-import { insertKnowledgeArticleSchema, insertMediaAssetSchema, insertWidgetConfigSchema, chatMessages } from "@shared/schema";
+import { insertKnowledgeArticleSchema, insertMediaAssetSchema, insertWidgetConfigSchema, chatMessages, enquiries } from "@shared/schema";
+import { like } from "drizzle-orm";
 import { db } from "./db";
 import multer from "multer";
 import path from "path";
@@ -32,6 +33,19 @@ const upload = multer({
 });
 
 // ── Lead API helper ───────────────────────────────────────────────────────────
+
+async function generateEnquiryId(): Promise<string> {
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const prefix = `ENQ-${today}-`;
+
+  const result = await db
+    .select({ count: db.$count(enquiries, like(enquiries.enquiryId, `${prefix}%`)) })
+    .from(enquiries)
+    .where(like(enquiries.enquiryId, `${prefix}%`));
+
+  const seq = String((result[0]?.count ?? 0) + 1).padStart(4, "0");
+  return `${prefix}${seq}`;
+}
 
 async function postLeadToApi(payload: {
   name?: string | null;
@@ -184,14 +198,26 @@ export async function registerRoutes(
             }
           }
 
+          const enquiryId = await generateEnquiryId();
+
           await Promise.all([
             storage.createChatMessage({
               sessionId,
               role: "assistant",
-              content: confirmationText,
+              content: `${confirmationText}\n\n**Enquiry ID: ${enquiryId}**`,
               mediaAttachments: null,
             }),
             storage.updateSessionLastMessage(sessionId),
+            storage.createEnquiry({
+              enquiryId,
+              sessionId,
+              name: extracted.name,
+              phone: extracted.phone,
+              email: extracted.email,
+              company: extracted.company,
+              notes: extracted.notes,
+              source: "card",
+            }),
           ]);
 
           // Fire webhook to Lead Mgmt app (fire-and-forget)
@@ -208,6 +234,7 @@ export async function registerRoutes(
               headers,
               body: JSON.stringify({
                 ...extracted,
+                enquiryId,
                 source: "webchat",
                 sessionId,
                 imageUrl: cardImageUrl,
@@ -243,12 +270,31 @@ export async function registerRoutes(
       // ── Sales agent: proactive lead collection ─────────────────────────────
       const stepResult = processLeadStep(sessionId, String(message));
       if (stepResult !== null) {
+        const botResponse = stepResult.response;
+
         await Promise.all([
-          storage.createChatMessage({ sessionId, role: "assistant", content: stepResult.response, mediaAttachments: null }),
+          storage.createChatMessage({ sessionId, role: "assistant", content: botResponse, mediaAttachments: null }),
           storage.updateSessionLastMessage(sessionId),
         ]);
+
         if (stepResult.lead) {
-          // Existing webhook (walead webhook endpoint)
+          const enquiryId = await generateEnquiryId();
+
+          // Save to local DB
+          await storage.createEnquiry({
+            enquiryId,
+            sessionId,
+            name: stepResult.lead.name,
+            phone: stepResult.lead.phone,
+            email: stepResult.lead.email,
+            productInterested: stepResult.lead.productInterested,
+            isForEvent: stepResult.lead.isForEvent,
+            company: stepResult.lead.company,
+            gst: stepResult.lead.gst,
+            source: "chat",
+          });
+
+          // Fire webhook (walead webhook endpoint)
           Promise.all([
             storage.getSetting("lead_capture_webhook_url"),
             storage.getSetting("lead_webhook_secret"),
@@ -259,7 +305,12 @@ export async function registerRoutes(
             fetch(url, {
               method: "POST",
               headers,
-              body: JSON.stringify({ ...stepResult.lead, sessionId, capturedAt: new Date().toISOString() }),
+              body: JSON.stringify({
+                ...stepResult.lead,
+                enquiryId,
+                sessionId,
+                capturedAt: new Date().toISOString(),
+              }),
             }).catch(err => console.error("[lead-collect] Webhook error:", err));
           }).catch(() => {});
 
@@ -269,13 +320,15 @@ export async function registerRoutes(
               name: stepResult.lead!.name,
               email: stepResult.lead!.email,
               phoneNumber: stepResult.lead!.phone,
+              company: stepResult.lead!.company,
               source: source || "chatbot",
               tags: ["chatbot"],
             });
           }).catch(() => {});
         }
+
         return res.json({
-          content: stepResult.response,
+          content: botResponse,
           mediaAttachments: [],
           matchedCategories: [],
           ...(stepResult.lead ? { leadCapture: stepResult.lead } : {}),
@@ -639,6 +692,28 @@ export async function registerRoutes(
       res.json(summary);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch analytics" });
+    }
+  });
+
+  app.get("/api/admin/leads", requireAuth, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const result = await storage.getEnquiries(limit, offset);
+      res.json(result);
+    } catch (error) {
+      console.error("[leads] Error:", error);
+      res.status(500).json({ error: "Failed to fetch leads" });
+    }
+  });
+
+  app.delete("/api/admin/leads/:id", requireAuth, async (req, res) => {
+    try {
+      await storage.deleteEnquiry(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      console.error("[leads] Error:", error);
+      res.status(500).json({ error: "Failed to delete lead" });
     }
   });
 

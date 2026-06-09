@@ -2,17 +2,35 @@ import { cache } from "./cache";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
+type LeadStep =
+  | "asking_name"
+  | "asking_phone"
+  | "asking_product"
+  | "asking_event"
+  | "asking_email"
+  | "asking_company"
+  | "asking_gst";
+
 interface LeadState {
-  step: "asking_name" | "asking_email_phone" | "asking_phone";
+  step: LeadStep;
   name?: string;
+  phone?: string;
+  product?: string;
+  isForEvent?: boolean;
   email?: string;
+  company?: string;
+  gst?: string;
   reaskCount: number;
 }
 
 export interface CapturedLead {
-  name: string;
-  email: string;
-  phone: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  productInterested: string | null;
+  isForEvent: boolean | null;
+  company: string | null;
+  gst: string | null;
   source: "chat";
 }
 
@@ -31,6 +49,8 @@ const INTENT_KEYWORDS = [
 
 const DECLINE_KEYWORDS = ["no", "skip", "later", "not now", "no thanks", "nope", "don't"];
 
+const BULK_KEYWORDS = ["bulk", "uniform", "corporate", "team", "event", "printed", "custom"];
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const stateKey = (id: number) => `lead_collect:${id}`;
@@ -46,18 +66,31 @@ function isDecline(msg: string) {
   return DECLINE_KEYWORDS.some(kw => l === kw || l.startsWith(kw + " ") || l.endsWith(" " + kw));
 }
 
+function isYes(msg: string): boolean {
+  const l = msg.toLowerCase().trim();
+  return ["yes", "yeah", "yep", "sure", "ok", "okay", "true", "1"].some(
+    kw => l === kw || l.startsWith(kw + " ")
+  );
+}
+
 function parseEmail(text: string): string | null {
   const m = text.match(/[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}/);
   return m ? m[0] : null;
 }
 
 function parsePhone(text: string): string | null {
-  // Remove email first to avoid matching digits in domain
   const cleaned = text.replace(/[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}/g, "");
   const m = cleaned.match(/[\+\d][\d\s\-\(\).]{5,}/);
   if (!m) return null;
   const digits = m[0].replace(/\D/g, "");
   return digits.length >= 5 ? m[0].trim() : null;
+}
+
+function shouldAskCompany(isForEvent: boolean | undefined, product: string | undefined): boolean {
+  if (isForEvent === true) return true;
+  if (!product) return false;
+  const p = product.toLowerCase();
+  return BULK_KEYWORDS.some(kw => p.includes(kw));
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -70,7 +103,7 @@ export function shouldTriggerLeadCollection(message: string, messageCount: numbe
 
 export function startLeadCollection(sessionId: number): string {
   cache.set(stateKey(sessionId), { step: "asking_name", reaskCount: 0 } as LeadState, COLLECT_TTL);
-  return "May I have your name so our team can follow up with you?";
+  return "May I have your name?";
 }
 
 export function processLeadStep(sessionId: number, message: string): { response: string; lead?: CapturedLead } | null {
@@ -80,63 +113,106 @@ export function processLeadStep(sessionId: number, message: string): { response:
   if (isDecline(message)) {
     cache.delete(stateKey(sessionId));
     cache.set(doneKey(sessionId), true, DONE_TTL);
-    return { response: "No problem! Feel free to ask if you change your mind." };
+    return { response: "No problem! Feel free to reach out if you need anything." };
   }
 
   const trimmed = message.trim();
 
-  // ── Name step ────────────────────────────────────────────────────────────
+  // ── Name ─────────────────────────────────────────────────────────────────
   if (state.step === "asking_name") {
     if (trimmed.length >= 2 && !/^\d+$/.test(trimmed)) {
-      const next: LeadState = { step: "asking_email_phone", name: trimmed, reaskCount: 0 };
+      const next: LeadState = { step: "asking_phone", name: trimmed, reaskCount: 0 };
       cache.set(stateKey(sessionId), next, COLLECT_TTL);
-      return { response: `Thanks ${trimmed}! What's your email and phone number?` };
+      return { response: `Thanks ${trimmed}! What's your mobile number?` };
     }
-    return reask(sessionId, state, "name");
+    return reask(sessionId, state, state.step);
   }
 
-  // ── Email + Phone combined step ──────────────────────────────────────────
-  if (state.step === "asking_email_phone") {
-    const email = parseEmail(trimmed);
-    const phone = parsePhone(trimmed);
-
-    if (email && phone) {
-      // Both provided in one message — complete
-      cache.delete(stateKey(sessionId));
-      cache.set(doneKey(sessionId), true, DONE_TTL);
-      const lead: CapturedLead = { name: state.name!, email, phone, source: "chat" };
-      return { response: "Perfect! Our team will be in touch soon. Is there anything else I can help you with?", lead };
-    }
-
-    if (email && !phone) {
-      // Only email — ask for phone
-      const next: LeadState = { step: "asking_phone", name: state.name, email, reaskCount: 0 };
-      cache.set(stateKey(sessionId), next, COLLECT_TTL);
-      return { response: "Got it! And your phone number?" };
-    }
-
-    if (!email && phone) {
-      // Only phone — ask for email
-      const next: LeadState = { ...state, email: undefined, reaskCount: 0 };
-      // Store phone temporarily in name field trick — no, let's just re-ask cleanly
-      cache.set(stateKey(sessionId), { ...state, reaskCount: state.reaskCount + 1 } as LeadState, COLLECT_TTL);
-      return { response: "I got your phone, but could you also share your email address?" };
-    }
-
-    // Neither found
-    return reask(sessionId, state, "email_phone");
-  }
-
-  // ── Phone-only step (fallback when only email was given above) ────────────
+  // ── Phone ────────────────────────────────────────────────────────────────
   if (state.step === "asking_phone") {
     const phone = parsePhone(trimmed);
     if (phone) {
-      cache.delete(stateKey(sessionId));
-      cache.set(doneKey(sessionId), true, DONE_TTL);
-      const lead: CapturedLead = { name: state.name!, email: state.email!, phone, source: "chat" };
-      return { response: "Perfect! Our team will be in touch soon. Is there anything else I can help you with?", lead };
+      const next: LeadState = { ...state, step: "asking_product", phone, reaskCount: 0 };
+      cache.set(stateKey(sessionId), next, COLLECT_TTL);
+      return { response: "Thanks! What product are you interested in?" };
     }
-    return reask(sessionId, state, "phone");
+    return reask(sessionId, state, state.step);
+  }
+
+  // ── Product ──────────────────────────────────────────────────────────────
+  if (state.step === "asking_product") {
+    if (trimmed.length >= 2) {
+      const next: LeadState = { ...state, step: "asking_event", product: trimmed, reaskCount: 0 };
+      cache.set(stateKey(sessionId), next, COLLECT_TTL);
+      return { response: "Is this for an event? (yes/no)" };
+    }
+    return reask(sessionId, state, state.step);
+  }
+
+  // ── Event (yes/no) ───────────────────────────────────────────────────────
+  if (state.step === "asking_event") {
+    const isForEvent = isYes(trimmed);
+    const next: LeadState = { ...state, step: "asking_email", isForEvent, reaskCount: 0 };
+    cache.set(stateKey(sessionId), next, COLLECT_TTL);
+    return { response: "Got it! What's your email address?" };
+  }
+
+  // ── Email ────────────────────────────────────────────────────────────────
+  if (state.step === "asking_email") {
+    const email = parseEmail(trimmed);
+    if (email) {
+      // Check if we should ask for company (smart branching)
+      if (shouldAskCompany(state.isForEvent, state.product)) {
+        const next: LeadState = { ...state, step: "asking_company", email, reaskCount: 0 };
+        cache.set(stateKey(sessionId), next, COLLECT_TTL);
+        return { response: "Great! What's your company name?" };
+      } else {
+        // Skip company/GST, go straight to completion
+        cache.delete(stateKey(sessionId));
+        cache.set(doneKey(sessionId), true, DONE_TTL);
+        const lead: CapturedLead = {
+          name: state.name || null,
+          phone: state.phone || null,
+          email,
+          productInterested: state.product || null,
+          isForEvent: state.isForEvent || null,
+          company: null,
+          gst: null,
+          source: "chat",
+        };
+        return { response: "Perfect! Thank you for your details. Our team will be in touch soon.", lead };
+      }
+    }
+    return reask(sessionId, state, state.step);
+  }
+
+  // ── Company ──────────────────────────────────────────────────────────────
+  if (state.step === "asking_company") {
+    if (trimmed.length >= 2) {
+      const next: LeadState = { ...state, step: "asking_gst", company: trimmed, reaskCount: 0 };
+      cache.set(stateKey(sessionId), next, COLLECT_TTL);
+      return { response: "Do you have a GST number?" };
+    }
+    return reask(sessionId, state, state.step);
+  }
+
+  // ── GST ──────────────────────────────────────────────────────────────────
+  if (state.step === "asking_gst") {
+    // Accept anything as GST (including "no", which we treat as empty)
+    const gst = isDecline(trimmed) ? null : trimmed;
+    cache.delete(stateKey(sessionId));
+    cache.set(doneKey(sessionId), true, DONE_TTL);
+    const lead: CapturedLead = {
+      name: state.name || null,
+      phone: state.phone || null,
+      email: state.email || null,
+      productInterested: state.product || null,
+      isForEvent: state.isForEvent || null,
+      company: state.company || null,
+      gst,
+      source: "chat",
+    };
+    return { response: "Excellent! Thank you for your details. Our team will be in touch soon.", lead };
   }
 
   return null;
@@ -144,24 +220,32 @@ export function processLeadStep(sessionId: number, message: string): { response:
 
 // ── Internal re-ask logic ────────────────────────────────────────────────────
 
-const RE_ASK: Record<string, string> = {
-  name:        "Just checking — could I get your name for our records?",
-  email_phone: "Whenever you're ready, what's your email and phone number?",
-  phone:       "And a phone number? That's the last thing I need!",
+const PROMPTS: Record<LeadStep, string> = {
+  asking_name:    "Could you share your name? (type 'skip' to continue)",
+  asking_phone:   "Could you share your mobile number? (e.g., 9876543210)",
+  asking_product: "What product are you interested in?",
+  asking_event:   "Is this for an event? (yes/no)",
+  asking_email:   "Could you share your email address?",
+  asking_company: "What's your company name?",
+  asking_gst:     "Do you have a GST number? (type 'no' if not)",
 };
 
-const PROMPT: Record<string, string> = {
-  name:        "Could you share your name? (type 'skip' to continue without)",
-  email_phone: "Could you share your email and phone? e.g. john@example.com, 9876543210",
-  phone:       "Could you share your phone number? (type 'skip' to continue without)",
+const RE_ASKS: Record<LeadStep, string> = {
+  asking_name:    "Just checking — could I get your name?",
+  asking_phone:   "Could you share your mobile number?",
+  asking_product: "What product interests you?",
+  asking_event:   "Is this for an event? (yes or no)",
+  asking_email:   "Could you share your email?",
+  asking_company: "What's your company name?",
+  asking_gst:     "Do you have a GST number?",
 };
 
-function reask(sessionId: number, state: LeadState, step: string): { response: string } {
+function reask(sessionId: number, state: LeadState, step: LeadStep): { response: string } {
   if (state.reaskCount >= MAX_REASKS) {
     cache.delete(stateKey(sessionId));
     cache.set(doneKey(sessionId), true, DONE_TTL);
-    return { response: "No worries! Let me know if there's anything else I can help with." };
+    return { response: "No worries! Feel free to reach out if you need anything." };
   }
   cache.set(stateKey(sessionId), { ...state, reaskCount: state.reaskCount + 1 } as LeadState, COLLECT_TTL);
-  return { response: state.reaskCount === 0 ? PROMPT[step] : RE_ASK[step] };
+  return { response: state.reaskCount === 0 ? PROMPTS[step as LeadStep] : RE_ASKS[step as LeadStep] };
 }

@@ -2,7 +2,7 @@ import { db } from "./db";
 import { eq, desc, sql, and, ilike, gte, lte, count, inArray } from "drizzle-orm";
 import {
   users, knowledgeArticles, mediaAssets, chatSessions, chatMessages,
-  adminSettings, widgetConfigs, analyticsEvents, knowledgeGaps,
+  adminSettings, widgetConfigs, analyticsEvents, knowledgeGaps, enquiries,
   type User, type InsertUser,
   type KnowledgeArticle, type InsertKnowledgeArticle,
   type MediaAsset, type InsertMediaAsset,
@@ -12,6 +12,7 @@ import {
   type WidgetConfig, type InsertWidgetConfig,
   type AnalyticsEvent, type InsertAnalyticsEvent,
   type KnowledgeGap,
+  type Enquiry, type InsertEnquiry,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -71,6 +72,10 @@ export interface IStorage {
     topDomains: Array<{ domain: string; count: number }>;
     sessionsOverTime: Array<{ date: string; count: number }>;
   }>;
+
+  createEnquiry(data: InsertEnquiry): Promise<Enquiry>;
+  getEnquiries(limit: number, offset: number): Promise<{ enquiries: Enquiry[]; total: number }>;
+  deleteEnquiry(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -463,6 +468,30 @@ export class DatabaseStorage implements IStorage {
 
   async deleteKnowledgeGap(id: number): Promise<void> {
     await db.delete(knowledgeGaps).where(eq(knowledgeGaps.id, id));
+  }
+
+  async createEnquiry(data: InsertEnquiry): Promise<Enquiry> {
+    const [created] = await db.insert(enquiries).values(data).returning();
+    return created;
+  }
+
+  async getEnquiries(limit: number, offset: number): Promise<{ enquiries: Enquiry[]; total: number }> {
+    const result = await db
+      .select()
+      .from(enquiries)
+      .orderBy(desc(enquiries.capturedAt))
+      .limit(limit)
+      .offset(offset);
+
+    const [{ total }] = await db
+      .select({ total: count() })
+      .from(enquiries);
+
+    return { enquiries: result, total };
+  }
+
+  async deleteEnquiry(id: number): Promise<void> {
+    await db.delete(enquiries).where(eq(enquiries.id, id));
   }
 
 }

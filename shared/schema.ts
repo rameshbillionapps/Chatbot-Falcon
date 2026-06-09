@@ -207,3 +207,32 @@ export const messages = pgTable("messages", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+export const enquiries = pgTable("enquiries", {
+  id: serial("id").primaryKey(),
+  enquiryId: text("enquiry_id").notNull().unique(),
+  sessionId: integer("session_id").references(() => chatSessions.id, { onDelete: "set null" }),
+  name: text("name"),
+  phone: text("phone"),
+  email: text("email"),
+  productInterested: text("product_interested"),
+  isForEvent: boolean("is_for_event"),
+  company: text("company"),
+  gst: text("gst"),
+  source: text("source").default("chat"),
+  status: text("status").default("new"),
+  notes: text("notes"),
+  capturedAt: timestamp("captured_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_enquiry_session").on(table.sessionId),
+  index("idx_enquiry_phone").on(table.phone),
+  index("idx_enquiry_captured").on(table.capturedAt),
+]);
+
+export const insertEnquirySchema = createInsertSchema(enquiries).omit({
+  id: true,
+  capturedAt: true,
+});
+
+export type Enquiry = typeof enquiries.$inferSelect;
+export type InsertEnquiry = z.infer<typeof insertEnquirySchema>;
+
