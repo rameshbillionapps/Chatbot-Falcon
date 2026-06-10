@@ -180,7 +180,10 @@ export function processLeadStep(sessionId: number, message: string): { response:
           gst: null,
           source: "chat",
         };
-        return { response: "Perfect! Thank you for your details. Our team will be in touch soon.", lead };
+        return {
+          response: "Thank you for the enquiry! Our team will contact you soon. You can reference your enquiry ID when we reach out. Is there anything else I can help you with?",
+          lead
+        };
       }
     }
     return reask(sessionId, state, state.step);
@@ -212,7 +215,10 @@ export function processLeadStep(sessionId: number, message: string): { response:
       gst,
       source: "chat",
     };
-    return { response: "Excellent! Thank you for your details. Our team will be in touch soon.", lead };
+    return {
+      response: "Thank you for the enquiry! Our team will contact you soon. You can reference your enquiry ID when we reach out. Is there anything else I can help you with?",
+      lead
+    };
   }
 
   return null;

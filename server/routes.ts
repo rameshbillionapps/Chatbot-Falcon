@@ -270,16 +270,21 @@ export async function registerRoutes(
       // ── Sales agent: proactive lead collection ─────────────────────────────
       const stepResult = processLeadStep(sessionId, String(message));
       if (stepResult !== null) {
-        const botResponse = stepResult.response;
+        let botResponse = stepResult.response;
+
+        // If lead is captured, generate enquiry ID and append to response
+        let enquiryId: string | null = null;
+        if (stepResult.lead) {
+          enquiryId = await generateEnquiryId();
+          botResponse = `${botResponse}\n\n**Your Enquiry ID: ${enquiryId}**`;
+        }
 
         await Promise.all([
           storage.createChatMessage({ sessionId, role: "assistant", content: botResponse, mediaAttachments: null }),
           storage.updateSessionLastMessage(sessionId),
         ]);
 
-        if (stepResult.lead) {
-          const enquiryId = await generateEnquiryId();
-
+        if (stepResult.lead && enquiryId) {
           // Save to local DB
           await storage.createEnquiry({
             enquiryId,
@@ -307,7 +312,7 @@ export async function registerRoutes(
               headers,
               body: JSON.stringify({
                 ...stepResult.lead,
-                enquiryId,
+                enquiryId: enquiryId!,
                 sessionId,
                 capturedAt: new Date().toISOString(),
               }),
