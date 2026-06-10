@@ -47,32 +47,30 @@ async function generateEnquiryId(): Promise<string> {
   return `${prefix}${seq}`;
 }
 
-async function postLeadToApi(payload: {
-  name?: string | null;
-  email?: string | null;
-  phoneNumber?: string | null;
-  company?: string | null;
-  designation?: string | null;
-  notes?: string | null;
-  tags?: string[];
-  source: string;
-}): Promise<void> {
-  const [apiUrl, secret] = await Promise.all([
-    storage.getSetting("lead_api_url"),
-    storage.getSetting("lead_webhook_secret"),
-  ]);
+async function postLeadToApi(
+  payload: {
+    name?: string | null;
+    email?: string | null;
+    phoneNumber?: string | null;
+    company?: string | null;
+    designation?: string | null;
+    notes?: string | null;
+    tags?: string[];
+    source: string;
+  },
+  enquiryId: string
+): Promise<void> {
+  const apiUrl = await storage.getSetting("lead_api_url");
   if (!apiUrl) return;
 
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (secret) headers["X-Webhook-Secret"] = secret;
-
-  fetch(apiUrl, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ ...payload, status: "new", score: "cold" }),
-  })
-    .then(r => console.log(`[lead-api] POST ${apiUrl} → ${r.status}`))
-    .catch(err => console.error("[lead-api] Error:", err));
+  await storage.createWebhookQueueItem({
+    enquiryId,
+    payload: { ...payload, status: "new", score: "cold" },
+    status: "pending",
+    maxAttempts: 3,
+    nextRetryAt: new Date(),
+  });
+  console.log(`[webhook-queue] enqueued ${enquiryId}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -256,7 +254,7 @@ export async function registerRoutes(
               notes: extracted.notes,
               source: source || "chatbot",
               tags: ["chatbot", "visiting-card"],
-            });
+            }, enquiryId!);
           }).catch(() => {});
 
           return res.json({ content: confirmationText, mediaAttachments: [], matchedCategories: [], cardExtraction: extracted });
@@ -328,7 +326,7 @@ export async function registerRoutes(
               company: stepResult.lead!.company,
               source: source || "chatbot",
               tags: ["chatbot"],
-            });
+            }, enquiryId!);
           }).catch(() => {});
         }
 
@@ -719,6 +717,42 @@ export async function registerRoutes(
     } catch (error) {
       console.error("[leads] Error:", error);
       res.status(500).json({ error: "Failed to delete lead" });
+    }
+  });
+
+  app.get("/api/admin/webhook-queue", requireAuth, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      res.json(await storage.getWebhookQueueItems(limit, offset));
+    } catch (error) {
+      console.error("[webhook-queue] Error:", error);
+      res.status(500).json({ error: "Failed to fetch queue" });
+    }
+  });
+
+  app.post("/api/admin/webhook-queue/:id/retry", requireAuth, async (req, res) => {
+    try {
+      await storage.updateWebhookQueueItem(parseInt(req.params.id), {
+        status: "pending" as any,
+        attempts: 0,
+        nextRetryAt: new Date(),
+        lastError: null as any,
+      });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("[webhook-queue] Error:", error);
+      res.status(500).json({ error: "Failed to retry" });
+    }
+  });
+
+  app.delete("/api/admin/webhook-queue/:id", requireAuth, async (req, res) => {
+    try {
+      await storage.deleteWebhookQueueItem(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      console.error("[webhook-queue] Error:", error);
+      res.status(500).json({ error: "Failed to delete" });
     }
   });
 

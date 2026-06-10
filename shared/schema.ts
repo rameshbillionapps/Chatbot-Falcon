@@ -207,6 +207,32 @@ export const messages = pgTable("messages", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+export const webhookQueue = pgTable("webhook_queue", {
+  id: serial("id").primaryKey(),
+  enquiryId: text("enquiry_id").notNull(),
+  payload: jsonb("payload").notNull().$type<Record<string, any>>(),
+  status: text("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(3),
+  lastAttemptAt: timestamp("last_attempt_at"),
+  nextRetryAt: timestamp("next_retry_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (table) => [
+  index("idx_wq_status").on(table.status),
+  index("idx_wq_next_retry").on(table.nextRetryAt),
+]);
+
+export const insertWebhookQueueSchema = createInsertSchema(webhookQueue).omit({
+  id: true,
+  attempts: true,
+  lastAttemptAt: true,
+  createdAt: true,
+});
+
+export type WebhookQueueItem = typeof webhookQueue.$inferSelect;
+export type InsertWebhookQueueItem = z.infer<typeof insertWebhookQueueSchema>;
+
 export const enquiries = pgTable("enquiries", {
   id: serial("id").primaryKey(),
   enquiryId: text("enquiry_id").notNull().unique(),

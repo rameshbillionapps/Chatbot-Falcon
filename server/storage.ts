@@ -2,7 +2,7 @@ import { db } from "./db";
 import { eq, desc, sql, and, ilike, gte, lte, count, inArray } from "drizzle-orm";
 import {
   users, knowledgeArticles, mediaAssets, chatSessions, chatMessages,
-  adminSettings, widgetConfigs, analyticsEvents, knowledgeGaps, enquiries,
+  adminSettings, widgetConfigs, analyticsEvents, knowledgeGaps, enquiries, webhookQueue,
   type User, type InsertUser,
   type KnowledgeArticle, type InsertKnowledgeArticle,
   type MediaAsset, type InsertMediaAsset,
@@ -13,6 +13,7 @@ import {
   type AnalyticsEvent, type InsertAnalyticsEvent,
   type KnowledgeGap,
   type Enquiry, type InsertEnquiry,
+  type WebhookQueueItem, type InsertWebhookQueueItem,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -76,6 +77,12 @@ export interface IStorage {
   createEnquiry(data: InsertEnquiry): Promise<Enquiry>;
   getEnquiries(limit: number, offset: number): Promise<{ enquiries: Enquiry[]; total: number }>;
   deleteEnquiry(id: number): Promise<void>;
+
+  createWebhookQueueItem(data: InsertWebhookQueueItem): Promise<WebhookQueueItem>;
+  getPendingWebhookItems(): Promise<WebhookQueueItem[]>;
+  getWebhookQueueItems(limit: number, offset: number): Promise<{ items: WebhookQueueItem[]; total: number }>;
+  updateWebhookQueueItem(id: number, data: Partial<WebhookQueueItem>): Promise<void>;
+  deleteWebhookQueueItem(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -492,6 +499,51 @@ export class DatabaseStorage implements IStorage {
 
   async deleteEnquiry(id: number): Promise<void> {
     await db.delete(enquiries).where(eq(enquiries.id, id));
+  }
+
+  async createWebhookQueueItem(data: InsertWebhookQueueItem): Promise<WebhookQueueItem> {
+    const [item] = await db.insert(webhookQueue).values(data).returning();
+    return item;
+  }
+
+  async getPendingWebhookItems(): Promise<WebhookQueueItem[]> {
+    return db
+      .select()
+      .from(webhookQueue)
+      .where(
+        and(
+          eq(webhookQueue.status, "pending"),
+          lte(webhookQueue.nextRetryAt, new Date())
+        )
+      )
+      .orderBy(webhookQueue.createdAt)
+      .limit(20);
+  }
+
+  async getWebhookQueueItems(limit: number, offset: number): Promise<{ items: WebhookQueueItem[]; total: number }> {
+    const items = await db
+      .select()
+      .from(webhookQueue)
+      .orderBy(desc(webhookQueue.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    const [{ total }] = await db
+      .select({ total: count() })
+      .from(webhookQueue);
+
+    return { items, total };
+  }
+
+  async updateWebhookQueueItem(id: number, data: Partial<WebhookQueueItem>): Promise<void> {
+    await db
+      .update(webhookQueue)
+      .set(data)
+      .where(eq(webhookQueue.id, id));
+  }
+
+  async deleteWebhookQueueItem(id: number): Promise<void> {
+    await db.delete(webhookQueue).where(eq(webhookQueue.id, id));
   }
 
 }
